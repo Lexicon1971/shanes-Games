@@ -39,22 +39,7 @@ class SoundEngine {
     private ctx: AudioContext | null = null;
     private masterGain: GainNode | null = null;
     public isMuted: boolean = false;
-    private ambientInterval: any = null;
     private voiceInterval: any = null;
-
-    private AI_PHRASES = [
-        "Cargo bay seven's pressure nominal.",
-        "Warning: Tea time, time for Tea.",
-        "Hull micro-fracture detected in Sector 4.",
-        "Life support operating at 98%.",
-        "Navigational array aligning.",
-        "External sensors cleaning cycle complete.",
-        "Incoming transmission blocked.",
-        "Coffee machine needs refilling.",
-        "Dark matter residue on starboard bow.",
-        "Trade federation channel open.",
-        "Backup generator test: Successful."
-    ];
 
     init() {
         if (!this.ctx) {
@@ -73,63 +58,60 @@ class SoundEngine {
         if (this.masterGain) {
             this.masterGain.gain.setTargetAtTime(this.isMuted ? 0 : 0.6, this.ctx!.currentTime, 0.1);
         }
-        if(this.isMuted) {
-            if(window.speechSynthesis) window.speechSynthesis.cancel();
-        }
         return this.isMuted;
     }
 
     startAmbience() {
-        // Random Creaks - Increased frequency (every 5s check) and probability (0.6)
-        this.ambientInterval = setInterval(() => {
-            if(!this.isMuted && Math.random() < 0.6) this.playCreak();
-        }, 5000);
-
-        // Random AI Voice - Increased frequency (every 12s check) and probability (0.5)
+        // Random Computer Noise - Replaces AI Voice
         this.voiceInterval = setInterval(() => {
-            if(!this.isMuted && Math.random() < 0.5) this.playVoice();
+            if(!this.isMuted && Math.random() < 0.5) this.playComputerNoise();
         }, 12000);
     }
 
-    playVoice() {
-        if (!window.speechSynthesis) return;
-        const text = this.AI_PHRASES[Math.floor(Math.random() * this.AI_PHRASES.length)];
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.volume = 0.4; // Increased volume for visibility
-        utter.rate = 1.1;
-        utter.pitch = 0.8; // Slightly robotic/deep
-        const voices = window.speechSynthesis.getVoices();
-        const robotic = voices.find(v => v.name.includes("Google US English") || v.name.includes("Samantha"));
-        if(robotic) utter.voice = robotic;
-        
-        window.speechSynthesis.speak(utter);
-    }
-
-    playCreak() {
-        if (!this.ctx || !this.masterGain || this.isMuted) return;
+    playComputerNoise() {
+        if (this.isMuted || !this.ctx || !this.masterGain) return;
         const t = this.ctx.currentTime;
+        
+        // 1. Data Chatter (Random bleeps)
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        const filter = this.ctx.createBiquadFilter();
-
-        // Low groan
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(50 + Math.random() * 20, t);
-        osc.frequency.exponentialRampToValueAtTime(40, t + 2); // Pitch drop
-
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(150, t);
-
-        gain.gain.setValueAtTime(0, t);
-        gain.gain.linearRampToValueAtTime(0.15, t + 0.5); // Louder attack (0.15 vs 0.05)
-        gain.gain.linearRampToValueAtTime(0, t + 2.5); // Slow release
-
-        osc.connect(filter);
-        filter.connect(gain);
-        gain.connect(this.masterGain);
+        osc.type = 'square';
         
+        // Complex frequency envelope for "talking/computing"
+        osc.frequency.setValueAtTime(800, t);
+        for(let i=0; i<6; i++) {
+            // Rapid pitch shifts between 800Hz and 1800Hz
+            osc.frequency.linearRampToValueAtTime(800 + Math.random() * 1000, t + (i*0.05));
+        }
+        
+        gain.gain.setValueAtTime(0.05, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+        
+        osc.connect(gain);
+        gain.connect(this.masterGain);
         osc.start(t);
-        osc.stop(t + 3);
+        osc.stop(t + 0.3);
+
+        // 2. Static Burst (White noise) simulating comms
+        const bSize = this.ctx.sampleRate * 0.5; // 0.5 sec buffer
+        const b = this.ctx.createBuffer(1, bSize, this.ctx.sampleRate);
+        const d = b.getChannelData(0);
+        for (let i = 0; i < bSize; i++) d[i] = (Math.random() * 2 - 1) * 0.1;
+        
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = b;
+        const noiseFilter = this.ctx.createBiquadFilter();
+        noiseFilter.type = 'bandpass';
+        noiseFilter.frequency.value = 1000;
+        
+        const noiseGain = this.ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.02, t);
+        noiseGain.gain.linearRampToValueAtTime(0, t + 0.2);
+        
+        noise.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(this.masterGain);
+        noise.start(t);
     }
 
     play(type: 'click' | 'coin' | 'warp' | 'error' | 'success' | 'alarm') {
@@ -444,7 +426,7 @@ export default function App() {
       loanTakenToday: false,
       venueTradeBans: {},
       messages: [
-        { id: 1, message: `System Init v12.3... Welcome aboard, Captain.`, type: 'info' },
+        { id: 1, message: `System Init v12.6... Welcome aboard, Captain.`, type: 'info' },
         { id: 2, message: `Widow's Gift Sent: ${formatCurrencyLog(30000)}. Loan secured from ${randomBank.name}.`, type: 'debt' },
         { id: 3, message: `ALERT: Ship stripped. Laser Offline. Account Overdrawn.`, type: 'critical' }
       ],
@@ -1467,7 +1449,7 @@ export default function App() {
 
   // --- Render ---
 
-  if (!state) return <div className="text-center text-white p-10 font-scifi">Loading v12.3...</div>;
+  if (!state) return <div className="text-center text-white p-10 font-scifi">Loading v12.6...</div>;
 
   const currentMarket = state.markets[state.currentVenueIndex];
   const netWorth = getNetWorth(state);
@@ -1486,7 +1468,7 @@ export default function App() {
        <header className="flex flex-col md:flex-row justify-between items-center px-4 py-4 gap-4 border-b border-gray-800 bg-gray-900/50 backdrop-blur-md sticky top-0 z-30 sci-fi-box">
           <div className="flex items-baseline space-x-2">
              <h1 className="font-scifi text-3xl md:text-4xl font-bold text-yellow-500">$TAR BUCKS</h1>
-             <span className="text-xs md:text-sm text-gray-500 font-mono">v12.3</span>
+             <span className="text-xs md:text-sm text-gray-500 font-mono">v12.6</span>
           </div>
 
           <div className="flex flex-wrap justify-center items-center gap-2 md:gap-4 text-cyan-300 font-mono text-sm md:text-xl font-bold">
