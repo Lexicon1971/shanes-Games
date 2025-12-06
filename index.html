@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>STAR BUCKS - The Strategic Edition (v6.3)</title>
+    <title>STAR BUCKS - The Strategic Edition (v12.3)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
@@ -19,9 +20,28 @@
       }
       body {
           font-family: 'Inter', sans-serif;
-          background-color: #06110f; /* Very Dark Green-Blue */
-          color: #d1fae5; /* Light mint */
+          background-color: transparent; /* Changed from #020408 to allow canvas to show */
+          color: #d1fae5;
+          overflow-x: hidden;
+          margin: 0;
+          padding: 0;
+          min-height: 100vh;
       }
+      
+      html {
+          background-color: #020408; /* Fallback */
+      }
+      
+      #starfield {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100vw;
+          height: 100vh;
+          z-index: -50; /* Ensure it is behind everything */
+          pointer-events: none;
+      }
+
       .text-neon {
           color: var(--color-secondary);
           text-shadow: 0 0 5px #fcd34d99, 0 0 10px #fcd34d66;
@@ -29,24 +49,44 @@
       .font-scifi {
           font-family: 'Orbitron', sans-serif;
       }
-      .card {
-          background-color: #0c4a34; /* Dark Emerald */
-          border: 1px solid #10b981; /* Emerald-500 */
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
-          transition: transform 0.2s;
+      
+      /* 3D Sci-Fi Box Effect */
+      .card, .sci-fi-box {
+          background: linear-gradient(135deg, rgba(6, 78, 59, 0.85) 0%, rgba(2, 44, 34, 0.95) 100%);
+          border: 1px solid #10b981;
+          box-shadow: 
+              0 0 5px rgba(16, 185, 129, 0.2),
+              inset 0 0 20px rgba(0, 0, 0, 0.5),
+              2px 4px 10px rgba(0,0,0,0.8);
+          position: relative;
+          backdrop-filter: blur(4px);
       }
-      .card:hover {
-          transform: translateY(-2px);
+      
+      /* Corner Accents for 3D look */
+      .sci-fi-box::after {
+          content: '';
+          position: absolute;
+          bottom: -1px;
+          right: -1px;
+          width: 15px;
+          height: 15px;
+          border-bottom: 2px solid #34d399;
+          border-right: 2px solid #34d399;
+          box-shadow: 2px 2px 5px rgba(52, 211, 153, 0.5);
       }
+      
       .action-btn {
           background-color: var(--color-accent);
           color: white;
-          transition: background-color 0.15s, transform 0.15s;
+          transition: all 0.15s;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
       }
       .action-btn:hover {
           background-color: #2563eb;
-          transform: scale(1.02);
+          transform: translateY(-1px);
+          box-shadow: 0 0 10px rgba(59, 130, 246, 0.6);
       }
+      
       .table-header {
           background-color: #0d5c41;
       }
@@ -59,21 +99,22 @@
           border-radius: 4px;
       }
       .custom-scrollbar::-webkit-scrollbar-track {
-          background: #0c4a34;
+          background: #022c22;
       }
-      /* Icon for Titanium Ore: Stylized Asteroid/Ore Lump SVG */
-      .titanium-icon {
-          display: inline-block;
-          width: 1.25rem;
-          height: 1.25rem;
-          margin-right: 0.5rem;
-          vertical-align: middle;
-          color: #9CA3AF;
+      
+      /* Utility to hide scrollbars but keep functionality */
+      .no-scrollbar::-webkit-scrollbar {
+          display: none;
       }
+      .no-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+      }
+
       .modal {
-          background-color: #06110f;
-          border: 2px solid #10b981;
-          box-shadow: 0 0 20px rgba(4, 120, 87, 0.8);
+          background-color: rgba(6, 17, 15, 0.95);
+          border: 1px solid #10b981;
+          box-shadow: 0 0 30px rgba(4, 120, 87, 0.6), inset 0 0 50px rgba(0,0,0,0.8);
       }
       /* Comms Log specific styles */
       #comms-log {
@@ -108,6 +149,59 @@
 </script>
 </head>
   <body class="p-4 sm:p-8">
+    <canvas id="starfield"></canvas>
     <div id="root"></div>
+    <script>
+      // Starfield Generation
+      const canvas = document.getElementById('starfield');
+      const ctx = canvas.getContext('2d');
+      
+      let width, height, stars = [];
+
+      function initStars() {
+          width = window.innerWidth;
+          height = window.innerHeight;
+          canvas.width = width;
+          canvas.height = height;
+          stars = [];
+          const numStars = Math.floor((width * height) / 500); // Increased Density for visibility
+          
+          for(let i=0; i<numStars; i++) {
+              stars.push({
+                  x: Math.random() * width,
+                  y: Math.random() * height,
+                  size: Math.random() < 0.9 ? Math.random() * 1.5 : Math.random() * 3, // Larger stars
+                  alpha: Math.random(),
+                  twinkleSpeed: 0.02 + Math.random() * 0.03
+              });
+          }
+      }
+
+      function animateStars() {
+          ctx.clearRect(0, 0, width, height);
+          ctx.fillStyle = "#020408"; 
+          ctx.fillRect(0,0,width,height); // Draw the black background on the canvas
+          
+          stars.forEach(star => {
+              ctx.globalAlpha = star.alpha;
+              ctx.fillStyle = 'white';
+              ctx.beginPath();
+              ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+              ctx.fill();
+              
+              // Twinkle effect
+              if (Math.random() < 0.1) {
+                  star.alpha += (Math.random() - 0.5) * star.twinkleSpeed;
+                  if (star.alpha < 0.2) star.alpha = 0.2;
+                  if (star.alpha > 1) star.alpha = 1;
+              }
+          });
+          requestAnimationFrame(animateStars);
+      }
+
+      window.addEventListener('resize', initStars);
+      initStars();
+      animateStars();
+    </script>
   </body>
 </html>

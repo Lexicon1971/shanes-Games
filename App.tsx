@@ -9,7 +9,7 @@ import {
   REPAIR_COST, REPAIR_INCREMENT, MAX_REPAIR_HEALTH, LOAN_REPAYMENT_DAYS, LASER_REPAIR_COST, QUIRKY_MESSAGES_DB, TUTORIAL_QUOTES
 } from './constants';
 import { GameState, Market, LoanOffer, LogEntry, DailyReport, Commodity, HighScore, CargoItem, EquipmentItem, Encounter, ActiveLoan, Contract, WarehouseItem, PendingTrade } from './types';
-import { Building2, Rocket, XCircle, Trophy, Zap, Truck, Shield, Wrench, Fuel, Crosshair, Heart, Swords, Skull, Box, AlertTriangle, Radar, ClipboardList, Radio, HelpCircle, Warehouse as WarehouseIcon, RefreshCw, Factory, Map as MapIcon, BarChart3, PowerOff, Droplets, Pill, Save } from 'lucide-react';
+import { Building2, Rocket, XCircle, Trophy, Zap, Truck, Shield, Wrench, Fuel, Crosshair, Heart, Swords, Skull, Box, AlertTriangle, Radar, ClipboardList, Radio, HelpCircle, Warehouse as WarehouseIcon, RefreshCw, Factory, Map as MapIcon, BarChart3, PowerOff, Droplets, Pill, Save, Volume2, VolumeX, Menu } from 'lucide-react';
 
 // --- FIREBASE SETUP ---
 import { initializeApp } from 'firebase/app';
@@ -33,6 +33,184 @@ try {
 } catch (e) {
   console.log("Firebase fallback.");
 }
+
+// --- AUDIO ENGINE ---
+class SoundEngine {
+    private ctx: AudioContext | null = null;
+    private masterGain: GainNode | null = null;
+    public isMuted: boolean = false;
+    private ambientInterval: any = null;
+    private voiceInterval: any = null;
+
+    private AI_PHRASES = [
+        "Cargo bay seven's pressure nominal.",
+        "Warning: Tea time, time for Tea.",
+        "Hull micro-fracture detected in Sector 4.",
+        "Life support operating at 98%.",
+        "Navigational array aligning.",
+        "External sensors cleaning cycle complete.",
+        "Incoming transmission blocked.",
+        "Coffee machine needs refilling.",
+        "Dark matter residue on starboard bow.",
+        "Trade federation channel open.",
+        "Backup generator test: Successful."
+    ];
+
+    init() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.connect(this.ctx.destination);
+            this.masterGain.gain.value = 0.6; // Increased master volume slightly
+            this.startAmbience();
+        } else if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    }
+
+    toggleMute() {
+        this.isMuted = !this.isMuted;
+        if (this.masterGain) {
+            this.masterGain.gain.setTargetAtTime(this.isMuted ? 0 : 0.6, this.ctx!.currentTime, 0.1);
+        }
+        if(this.isMuted) {
+            if(window.speechSynthesis) window.speechSynthesis.cancel();
+        }
+        return this.isMuted;
+    }
+
+    startAmbience() {
+        // Random Creaks - Increased frequency (every 5s check) and probability (0.6)
+        this.ambientInterval = setInterval(() => {
+            if(!this.isMuted && Math.random() < 0.6) this.playCreak();
+        }, 5000);
+
+        // Random AI Voice - Increased frequency (every 12s check) and probability (0.5)
+        this.voiceInterval = setInterval(() => {
+            if(!this.isMuted && Math.random() < 0.5) this.playVoice();
+        }, 12000);
+    }
+
+    playVoice() {
+        if (!window.speechSynthesis) return;
+        const text = this.AI_PHRASES[Math.floor(Math.random() * this.AI_PHRASES.length)];
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.volume = 0.4; // Increased volume for visibility
+        utter.rate = 1.1;
+        utter.pitch = 0.8; // Slightly robotic/deep
+        const voices = window.speechSynthesis.getVoices();
+        const robotic = voices.find(v => v.name.includes("Google US English") || v.name.includes("Samantha"));
+        if(robotic) utter.voice = robotic;
+        
+        window.speechSynthesis.speak(utter);
+    }
+
+    playCreak() {
+        if (!this.ctx || !this.masterGain || this.isMuted) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const filter = this.ctx.createBiquadFilter();
+
+        // Low groan
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(50 + Math.random() * 20, t);
+        osc.frequency.exponentialRampToValueAtTime(40, t + 2); // Pitch drop
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(150, t);
+
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.15, t + 0.5); // Louder attack (0.15 vs 0.05)
+        gain.gain.linearRampToValueAtTime(0, t + 2.5); // Slow release
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.masterGain);
+        
+        osc.start(t);
+        osc.stop(t + 3);
+    }
+
+    play(type: 'click' | 'coin' | 'warp' | 'error' | 'success' | 'alarm') {
+        if (this.isMuted || !this.ctx || !this.masterGain) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+
+        switch (type) {
+            case 'click':
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(880, t); 
+                gain.gain.setValueAtTime(0.05, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+                osc.start(t);
+                osc.stop(t + 0.1);
+                break;
+            case 'coin':
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1200, t);
+                osc.frequency.setValueAtTime(1800, t + 0.08); // Jump pitch
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+                osc.start(t);
+                osc.stop(t + 0.4);
+                break;
+            case 'error':
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(110, t);
+                osc.frequency.linearRampToValueAtTime(80, t + 0.3);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.3);
+                osc.start(t);
+                osc.stop(t + 0.3);
+                break;
+            case 'warp':
+                const bSize = this.ctx.sampleRate * 2;
+                const b = this.ctx.createBuffer(1, bSize, this.ctx.sampleRate);
+                const d = b.getChannelData(0);
+                for (let i = 0; i < bSize; i++) d[i] = Math.random() * 2 - 1;
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = b;
+                const nf = this.ctx.createBiquadFilter();
+                nf.type = 'lowpass';
+                nf.frequency.setValueAtTime(100, t);
+                nf.frequency.exponentialRampToValueAtTime(5000, t + 1.5);
+                const ng = this.ctx.createGain();
+                ng.gain.setValueAtTime(0.3, t);
+                ng.gain.linearRampToValueAtTime(0, t + 2);
+                noise.connect(nf);
+                nf.connect(ng);
+                ng.connect(this.masterGain);
+                noise.start(t);
+                break;
+            case 'success':
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(523.25, t); // C5
+                osc.frequency.setValueAtTime(659.25, t + 0.1); // E5
+                osc.frequency.setValueAtTime(783.99, t + 0.2); // G5
+                gain.gain.setValueAtTime(0.05, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.5);
+                osc.start(t);
+                osc.stop(t + 0.5);
+                break;
+            case 'alarm':
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(800, t);
+                osc.frequency.linearRampToValueAtTime(1200, t + 0.15);
+                osc.frequency.linearRampToValueAtTime(800, t + 0.3);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.3);
+                osc.start(t);
+                osc.stop(t + 0.3);
+                break;
+        }
+    }
+}
+
+const SFX = new SoundEngine();
 
 // --- Utils ---
 
@@ -128,35 +306,18 @@ const renderLogMessage = (msg: string) => {
 };
 
 const StatusDial = ({ value, max, icon: Icon, color, label, isPercent }: { value: number, max: number, icon: any, color: string, label: string, isPercent?: boolean }) => {
-  const size = 80; 
-  const center = size / 2;
-  const radius = 32; 
-  const stroke = 4;
-  const normalizedRadius = radius - stroke * 2;
-  const circumference = normalizedRadius * 2 * Math.PI;
-  const strokeDashoffset = circumference - (Math.min(value, max) / max) * circumference;
-  const strokeColor = color.includes('red') ? '#ef4444' : color.includes('green') ? '#10b981' : '#3b82f6';
-
+  const percentage = Math.min(Math.max(value / max, 0), 1) * 100;
+  
   return (
-    <div className="flex flex-col items-center mx-3 relative">
-      <div className="relative w-20 h-20 flex items-center justify-center">
-         <svg className="w-full h-full transform -rotate-90">
-            <circle cx={center} cy={center} r={radius} stroke="#374151" strokeWidth="1" fill="none" />
-            <circle cx={center} cy={center} r={normalizedRadius - stroke} stroke="#374151" strokeWidth="1" fill="none" />
-            <circle cx={center} cy={center} r={normalizedRadius} stroke="#1f2937" strokeWidth={stroke} fill="none" />
-            <circle 
-              cx={center} cy={center} r={normalizedRadius} 
-              stroke={strokeColor} strokeWidth={stroke} 
-              fill="none" 
-              strokeDasharray={circumference + ' ' + circumference} 
-              style={{ strokeDashoffset }} 
-              strokeLinecap="round" 
-            />
-         </svg>
-         <Icon size={20} className={`absolute ${color}`} />
-      </div>
-      <div className={`text-base font-bold mt-1 ${color}`}>{value}{isPercent?'%':''}</div>
-      <div className="text-xs text-gray-500 uppercase tracking-wider">{label !== '%' ? label : ''}</div>
+    <div className="flex flex-col items-center mx-1 md:mx-2 p-2 bg-black/40 rounded border border-gray-700 w-20 md:w-24">
+        <div className="flex justify-between items-center w-full mb-1">
+            <Icon size={14} className={color} />
+            <span className={`text-[10px] md:text-xs font-bold ${color}`}>{value}{isPercent?'%':''}</span>
+        </div>
+        <div className="w-full bg-gray-800 rounded-full h-1.5 mb-1 overflow-hidden">
+            <div className={`h-1.5 rounded-full ${color.replace('text-', 'bg-')}`} style={{ width: `${percentage}%` }}></div>
+        </div>
+        <div className="text-[8px] md:text-[10px] text-gray-500 uppercase tracking-wider">{label}</div>
     </div>
   );
 };
@@ -178,6 +339,12 @@ export default function App() {
   const [fomoQty, setFomoQty] = useState<string>(''); 
   const [fomoStimQty, setFomoStimQty] = useState<string>(''); 
   const [claimQuantities, setClaimQuantities] = useState<Record<string, string>>({});
+  const [isMuted, setIsMuted] = useState(false);
+
+  const toggleSound = () => {
+      const muted = SFX.toggleMute();
+      setIsMuted(muted);
+  };
 
   const loadHighScores = async () => {
     let scores: HighScore[] = [];
@@ -277,7 +444,7 @@ export default function App() {
       loanTakenToday: false,
       venueTradeBans: {},
       messages: [
-        { id: 1, message: `System Init v11.1... Welcome aboard, Captain.`, type: 'info' },
+        { id: 1, message: `System Init v12.3... Welcome aboard, Captain.`, type: 'info' },
         { id: 2, message: `Widow's Gift Sent: ${formatCurrencyLog(30000)}. Loan secured from ${randomBank.name}.`, type: 'debt' },
         { id: 3, message: `ALERT: Ship stripped. Laser Offline. Account Overdrawn.`, type: 'critical' }
       ],
@@ -314,11 +481,13 @@ export default function App() {
   const saveAndExit = () => {
       if (state) {
           localStorage.setItem('sbe_savegame', JSON.stringify(state));
+          SFX.play('success');
           window.location.reload();
       }
   };
 
   const loadSavedGame = () => {
+      SFX.init(); // Initialize audio context on user interaction
       const saveString = localStorage.getItem('sbe_savegame');
       if (saveString) {
           try {
@@ -326,6 +495,7 @@ export default function App() {
               setState(savedState);
               setModal({ type: 'none', data: null });
               log('System: Save game loaded successfully.', 'info');
+              SFX.play('success');
           } catch(e) {
               alert("Save file corrupted. Starting new game.");
               initGame(false);
@@ -373,6 +543,7 @@ export default function App() {
   };
 
   const handleFeatureClick = (feature: string, callback: () => void) => {
+      SFX.play('click');
       if (feature === 'travel' && state && state.cargoWeight > state.cargoCapacity) {
           setModal({
               type: 'overweight_warning',
@@ -397,7 +568,7 @@ export default function App() {
           }
           if (feature === 'shipping') { 
               title = "Void-Ex Logistics"; 
-              text = "Take advantage of Corporate Contracts and fulfil them by shipping the goods within the term limit. Only shipped goods allowed, delivered within or before the term expires, will be accepted so long as they are the exact quantities requested. Use the Fulfil option to ensure you comply; no in-person or further correspondence is needed. \nFailure to meet these terms will result in a 3 day ban to the market associated with that request. \nWe offer high-paying rewards for those who comply. \n\nPro-Tip: Captain, if your bay is too small to hold a large load, you can always use the 'Private Shipping' to move goods to a warehouse at any venue; no one else needs to know. However, any good left unmoved for 3 days will be sold to defray storage costs."; 
+              text = "Take advantage of Corporate Contracts and fulfil them by shipping the goods within the term limit. Only shipped goods allowed, delivered within or before the term expires, will be accepted so long as they are the exact quantities requested. Use the Fulfil option to ensure you comply; no in-person or further correspondence is needed. \nFailure to meet these terms will result in a 3 day ban to the market associated with that request. \nWe offer high-paying rewards for those who comply. \n\nPro-Tip: Captain, if your bay is too small to hold a large load, you can always use the 'Private Shipping' to move goods to a warehouse at any venue; no one else needs to know. However, any goods left unmoved for 3 days will be sold to defray storage costs."; 
           }
           if (feature === 'comms') { 
               title = "G.I.G.O. Panel"; 
@@ -622,6 +793,7 @@ export default function App() {
           }) : null);
           if (tax > 0) log(`TAX: Paid ${formatCurrencyLog(tax)} for frequent trading.`, 'overdraft');
           setBuyQuantities(prev => ({...prev, [c.name]: ''}));
+          SFX.play('coin');
 
       } else {
           let rev = qty * mItem.price - tax;
@@ -649,6 +821,7 @@ export default function App() {
           if (tax > 0) log(`TAX: Paid ${formatCurrencyLog(tax)} for frequent trading.`, 'overdraft');
           log(isProfitable ? `PROFIT: Made ${formatCurrencyLog(profit)} selling ${c.name}` : `LOSS: Lost ${formatCurrencyLog(Math.abs(profit))} selling ${c.name}`, isProfitable ? 'profit' : 'danger');
           setSellQuantities(prev => ({...prev, [c.name]: ''}));
+          SFX.play('coin');
       }
       setModal({type:'none', data:null});
   };
@@ -683,6 +856,7 @@ export default function App() {
   };
 
   const setMaxBuy = (c: Commodity, mItem: any) => {
+    SFX.play('click');
     if (!state) return;
     const cashMax = Math.floor(state.cash / mItem.price);
     const val = Math.max(0, Math.min(cashMax, mItem.quantity));
@@ -698,6 +872,7 @@ export default function App() {
      if (item.type === 'laser') newLaserHealth = 100;
      setState(prev => prev ? ({ ...prev, cash: prev.cash - scaledCost, cargoCapacity: newCap, laserHealth: newLaserHealth, equipment: { ...prev.equipment, [item.id]: true } }) : null);
      log(`UPGRADES: Purchased ${item.name}`, 'buy');
+     SFX.play('success');
   };
   
   const performRepair = (type: 'hull' | 'laser' | 'full_hull' | 'full_laser') => {
@@ -710,6 +885,7 @@ export default function App() {
           if (state.cash < cost) return setModal({type:'message', data:`Insufficient funds. Need ${formatCurrencyLog(cost)}.`});
           setState(prev => prev ? ({...prev, cash: prev.cash - cost, shipHealth: MAX_REPAIR_HEALTH}) : null);
           log(`REPAIR: Hull fully restored.`, 'repair');
+          SFX.play('success');
           return;
       }
       if (type === 'full_laser') {
@@ -720,6 +896,7 @@ export default function App() {
           if (state.cash < cost) return setModal({type:'message', data:`Insufficient funds. Need ${formatCurrencyLog(cost)}.`});
           setState(prev => prev ? ({...prev, cash: prev.cash - cost, laserHealth: MAX_LASER_HEALTH}) : null);
           log(`REPAIR: Laser fully realigned.`, 'repair');
+          SFX.play('success');
           return;
       }
   };
@@ -734,25 +911,26 @@ export default function App() {
   const acceptContract = (c: Contract) => {
     if (!state) return;
     const limit = state.gamePhase === 1 ? CONTRACT_LIMIT_P1 : (state.gamePhase === 2 ? CONTRACT_LIMIT_P2 : CONTRACT_LIMIT_P3);
-    if (state.activeContracts.length >= limit) return setModal({type:'message', data: `Contract limit reached (${limit}).`});
+    if (state.activeContracts.length >= limit) { SFX.play('error'); return setModal({type:'message', data: `Contract limit reached (${limit}).`}); }
     
     const newAvail = state.availableContracts.filter(con => con.id !== c.id);
     const newActive = [...state.activeContracts, c];
     
     setState(prev => prev ? ({ ...prev, availableContracts: newAvail, activeContracts: newActive }) : null);
     log(`CONTRACT: Accepted ${c.firm} contract.`, 'contract');
+    SFX.play('click');
   };
   
   const fabricateItem = (qty: number) => {
       if (!state) return;
-      if (state.fomoDailyUse.mesh) return setModal({type:'message', data: "Daily Limit Reached for Mesh Fabrication."});
+      if (state.fomoDailyUse.mesh) { SFX.play('error'); return setModal({type:'message', data: "Daily Limit Reached for Mesh Fabrication."}); }
       
       const COST_PER = 2500;
       const ore = state.cargo['Titanium Ore']?.quantity || 0;
       const cloth = state.cargo['Synthetic Cloth']?.quantity || 0;
       
-      if (ore < qty || cloth < qty) return setModal({type:'message', data: "Insufficient Materials (Need 1 Ore + 1 Cloth per unit)."});
-      if (state.cash < qty * COST_PER) return setModal({type:'message', data: "Insufficient Funds."});
+      if (ore < qty || cloth < qty) { SFX.play('error'); return setModal({type:'message', data: "Insufficient Materials (Need 1 Ore + 1 Cloth per unit)."}); }
+      if (state.cash < qty * COST_PER) { SFX.play('error'); return setModal({type:'message', data: "Insufficient Funds."}); }
 
       const newC = { ...state.cargo };
       newC['Titanium Ore'].quantity = Math.max(0, newC['Titanium Ore'].quantity - qty);
@@ -778,18 +956,19 @@ export default function App() {
       
       log(`FABRICATION: Created ${qty} ${MESH_NAME}. Daily limit reached.`, 'buy');
       setFomoQty('');
+      SFX.play('success');
   };
 
   const fabricateStimPacks = (qty: number) => {
       if (!state) return;
-      if (state.fomoDailyUse.stims) return setModal({type:'message', data: "Daily Limit Reached for Stim-Pack Fabrication."});
+      if (state.fomoDailyUse.stims) { SFX.play('error'); return setModal({type:'message', data: "Daily Limit Reached for Stim-Pack Fabrication."}); }
 
       const COST_PER = 250;
       const h2o = state.cargo[H2O_NAME]?.quantity || 0;
       const paste = state.cargo[NUTRI_PASTE_NAME]?.quantity || 0;
       
-      if (h2o < qty * 2 || paste < qty) return setModal({type:'message', data: "Insufficient Materials (Need 2 H2O + 1 Nutri-Paste per unit)."});
-      if (state.cash < qty * COST_PER) return setModal({type:'message', data: "Insufficient Funds."});
+      if (h2o < qty * 2 || paste < qty) { SFX.play('error'); return setModal({type:'message', data: "Insufficient Materials (Need 2 H2O + 1 Nutri-Paste per unit)."}); }
+      if (state.cash < qty * COST_PER) { SFX.play('error'); return setModal({type:'message', data: "Insufficient Funds."}); }
 
       const newC = { ...state.cargo };
       newC[H2O_NAME].quantity = Math.max(0, newC[H2O_NAME].quantity - (qty * 2));
@@ -818,6 +997,7 @@ export default function App() {
       
       log(`FABRICATION: Created ${qty} Stim-Packs. Daily limit reached.`, 'buy');
       setFomoStimQty('');
+      SFX.play('success');
   };
 
   const claimWarehouseItem = (venueIdx: number, commodity: string, qty: number) => {
@@ -847,6 +1027,7 @@ export default function App() {
       setState(prev => prev ? ({ ...prev, cargo: newCargo, warehouse: newW, cargoWeight: prev.cargoWeight + weight }) : null);
       log(`LOGISTICS: Claimed ${qty} ${commodity} from warehouse.`, 'info');
       setClaimQuantities({...claimQuantities, [commodity]: ''});
+      SFX.play('success');
   };
 
   const forwardWarehouseItem = (venueIdx: number, commodity: string) => {
@@ -855,6 +1036,7 @@ export default function App() {
       setShippingSource({ [commodity]: { type: 'warehouse', venueIdx } });
       setShippingQuantities({ [commodity]: state.warehouse[venueIdx][commodity].quantity.toString() });
       setHighlightShippingItem(commodity);
+      SFX.play('click');
   };
 
   const processDay = (s: GameState, report: DailyReport) => {
@@ -1014,16 +1196,20 @@ export default function App() {
          if (s.day > deadline && nw < curGoal) {
              s.gameOver = true;
              setModal({ type: 'endgame', data: { reason: "Phase Deadline Missed. License Revoked.", netWorth: nw, stats: s.stats } });
+             SFX.play('error');
              return;
          }
          if (s.day === deadline) {
              setModal({type:'message', data: "URGENT WARNING: Today is the Phase Deadline. Meet the goal or face license revocation!", color: 'text-red-500'});
+             SFX.play('alarm');
          } else if (!s.gameOver) {
             setModal({ type: 'report', data: { events: report.events, day: s.day, tips: getMarketTips(s), quirky: report.quirkyMessage } });
             setState(s);
          }
          return;
      }
+
+     SFX.play('warp');
 
      if (invest95 && s.activeLoans.length === 0) {
          const investAmt = Math.floor(s.cash * 0.95);
@@ -1112,6 +1298,7 @@ export default function App() {
         }
         
         setModal({ type: 'event_encounter', data: { state: s, report, encounter, destIdx, mine, overload } });
+        SFX.play('alarm');
         return; 
      }
      finalizeJump(s, report, destIdx, mine, overload);
@@ -1186,12 +1373,14 @@ export default function App() {
          const daysExt = daysNext - daysCurrent; 
          
          setModal({ type: 'goal_achieved', data: { phase: s.gamePhase, nextPhase: s.gamePhase + 1, state: s, report, daysExtended: daysExt } });
+         SFX.play('success');
          return; 
      }
      if (nw >= curGoal && s.gamePhase === 3) {
          // Phase 3 -> Overtime (Phase 4)
          const daysExt = GOAL_OVERTIME_DAYS - GOAL_PHASE_3_DAYS;
          setModal({ type: 'goal_achieved', data: { phase: 3, nextPhase: 4, state: s, report, daysExtended: daysExt } });
+         SFX.play('success');
          return;
      }
 
@@ -1207,12 +1396,14 @@ export default function App() {
              // Chain report after? Or just show report behind/next
              setTimeout(() => setModal({ type: 'report', data: { events: report.events, day: s.day, tips: getMarketTips(s), quirky: report.quirkyMessage } }), 2000);
              setState(s);
+             SFX.play('alarm');
              return;
         }
         setModal({ type: 'report', data: { events: report.events, day: s.day, tips: getMarketTips(s), quirky: report.quirkyMessage } });
         setState(s);
      } else {
         setModal({ type: 'endgame', data: { reason: "Deadline Missed. License Revoked.", netWorth: nw, stats: s.stats } });
+        SFX.play('error');
      }
   };
 
@@ -1238,6 +1429,7 @@ export default function App() {
   };
 
   const acknowledgeReport = () => {
+    SFX.play('click');
     if (state && modal.type === 'report') {
        const tips = modal.data.tips;
        if (tips && tips.length > 0) {
@@ -1275,7 +1467,7 @@ export default function App() {
 
   // --- Render ---
 
-  if (!state) return <div className="text-center text-white p-10 font-scifi">Loading v11.1...</div>;
+  if (!state) return <div className="text-center text-white p-10 font-scifi">Loading v12.3...</div>;
 
   const currentMarket = state.markets[state.currentVenueIndex];
   const netWorth = getNetWorth(state);
@@ -1291,69 +1483,74 @@ export default function App() {
   return (
     <div className="max-w-7xl mx-auto space-y-4 pb-12">
        
-       <header className="flex flex-wrap justify-between items-center px-4 py-4 border-b border-gray-800 bg-gray-900/50">
+       <header className="flex flex-col md:flex-row justify-between items-center px-4 py-4 gap-4 border-b border-gray-800 bg-gray-900/50 backdrop-blur-md sticky top-0 z-30 sci-fi-box">
           <div className="flex items-baseline space-x-2">
-             <h1 className="font-scifi text-4xl font-bold text-yellow-500">$TAR BUCKS</h1>
-             <span className="text-sm text-gray-500 font-mono">v11.1</span>
+             <h1 className="font-scifi text-3xl md:text-4xl font-bold text-yellow-500">$TAR BUCKS</h1>
+             <span className="text-xs md:text-sm text-gray-500 font-mono">v12.3</span>
           </div>
 
-          <div className="flex items-center space-x-4 text-cyan-300 font-mono text-xl font-bold">
+          <div className="flex flex-wrap justify-center items-center gap-2 md:gap-4 text-cyan-300 font-mono text-sm md:text-xl font-bold">
              <span>Day {state.day}/{deadline}</span>
              <span className="text-gray-600">|</span>
              <span>{state.gamePhase === 4 ? "Final Phase" : `Phase ${state.gamePhase}`}</span>
              <span className="text-gray-600">|</span>
              <span className="flex items-center">
                  {state.gamePhase === 4 ? (
-                     <>Goal: 2 <span className="text-2xl font-bold mx-1">&infin;</span> & Beyond</>
+                     <>Goal: 2 <span className="text-xl md:text-2xl font-bold mx-1">&infin;</span> & Beyond</>
                  ) : (
-                     <>Goal: <PriceDisplay value={goal} size="text-xl ml-1" compact={state.gamePhase>=2} /></>
+                     <>Goal: <PriceDisplay value={goal} size="text-sm md:text-xl ml-1" compact={state.gamePhase>=2} /></>
                  )}
              </span>
              
-             <button onClick={()=>setModal({type:'highscores', data:null})} className="bg-slate-800 hover:bg-slate-700 px-3 py-1 rounded border border-gray-600 text-yellow-400 font-scifi text-sm ml-4 flex items-center"><Trophy className="mr-1" size={16}/> Legends</button>
+             <div className="flex items-center gap-2 ml-2">
+                 <button onClick={()=>setModal({type:'highscores', data:null})} className="bg-slate-800 hover:bg-slate-700 px-2 py-1 md:px-3 rounded border border-gray-600 text-yellow-400 font-scifi text-xs md:text-sm flex items-center action-btn"><Trophy className="mr-1" size={14}/> Legends</button>
+                 <button onClick={toggleSound} className="text-gray-400 hover:text-white p-1 rounded">{isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
+             </div>
           </div>
 
-          <div className="text-right">
-             <div className="text-3xl font-scifi text-yellow-400 flex items-center justify-end"><PriceDisplay value={netWorth} size="text-3xl" compact={state.gamePhase>=2} /></div>
-             <div className="text-xs text-gray-500">NET WORTH</div>
+          <div className="text-center md:text-right">
+             <div className="text-2xl md:text-3xl font-scifi text-yellow-400 flex items-center justify-center md:justify-end"><PriceDisplay value={netWorth} size="text-2xl md:text-3xl" compact={state.gamePhase>=2} /></div>
+             <div className="text-[10px] md:text-xs text-gray-500">NET WORTH</div>
           </div>
        </header>
 
        <div className="flex flex-col md:flex-row gap-4 items-stretch py-2">
-          <div className="flex items-center justify-start space-x-2 bg-slate-900/40 p-2 rounded-xl border border-gray-800 min-w-max">
+          {/* Added 'no-scrollbar' class here */}
+          <div className="flex items-center justify-center md:justify-start space-x-2 bg-slate-900/40 p-2 rounded-xl border border-gray-800 w-full md:w-auto md:min-w-max sci-fi-box overflow-x-auto no-scrollbar">
              <StatusDial value={Math.round(state.shipHealth)} max={150} icon={Heart} color="text-green-500" label="Hull" isPercent />
              <StatusDial value={(state.cargo[FUEL_NAME]?.quantity||0)} max={200} icon={Fuel} color="text-blue-500" label="Fuel" />
              <StatusDial value={hasLaser(state) ? Math.round(state.laserHealth || 0) : 0} max={100} icon={Crosshair} color={hasLaser(state)?'text-red-500':'text-gray-600'} label={hasLaser(state)?'Online':'Offline'} isPercent />
           </div>
 
           <div className="flex-grow grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-             <button onClick={()=>handleFeatureClick('shop', ()=>setModal({type:'shop', data:null}))} className="bg-purple-900/40 hover:bg-purple-800 border border-purple-600 text-purple-300 p-2 rounded flex flex-col items-center justify-center font-scifi text-sm shadow-[0_0_10px_rgba(147,51,234,0.3)]"><Zap className="mb-1" size={18}/> Upgrades Deck</button>
-             <button onClick={()=>handleFeatureClick('banking', ()=>setModal({type:'banking', data:null}))} className="bg-yellow-900/40 hover:bg-yellow-800 border border-yellow-600 text-yellow-500 p-2 rounded flex flex-col items-center justify-center font-scifi text-sm shadow-[0_0_10px_rgba(202,138,4,0.3)]"><Building2 className="mb-1" size={18}/> I.B.A.N.K. Hub 
-                <span className={`text-xs flex items-center mt-1 font-bold ${totalDebt > 0 ? 'text-red-500' : (totalInv > 0 ? 'text-green-500' : 'text-yellow-600')}`}>
-                   {totalDebt > 0 ? <PriceDisplay value={totalDebt} size="text-xs" compact /> : (totalInv > 0 ? <PriceDisplay value={totalInv} size="text-xs" compact /> : '')}
+             <button onClick={()=>handleFeatureClick('shop', ()=>setModal({type:'shop', data:null}))} className="bg-purple-900/40 hover:bg-purple-800 border border-purple-600 text-purple-300 p-2 rounded flex flex-col items-center justify-center font-scifi text-xs md:text-sm shadow-[0_0_10px_rgba(147,51,234,0.3)] action-btn"><Zap className="mb-1" size={18}/> Upgrades</button>
+             <button onClick={()=>handleFeatureClick('banking', ()=>setModal({type:'banking', data:null}))} className="bg-yellow-900/40 hover:bg-yellow-800 border border-yellow-600 text-yellow-500 p-2 rounded flex flex-col items-center justify-center font-scifi text-xs md:text-sm shadow-[0_0_10px_rgba(202,138,4,0.3)] action-btn"><Building2 className="mb-1" size={18}/> Bank 
+                <span className={`text-[10px] flex items-center mt-1 font-bold ${totalDebt > 0 ? 'text-red-500' : (totalInv > 0 ? 'text-green-500' : 'text-yellow-600')}`}>
+                   {totalDebt > 0 ? <PriceDisplay value={totalDebt} size="text-[10px]" compact /> : (totalInv > 0 ? <PriceDisplay value={totalInv} size="text-[10px]" compact /> : '')}
                 </span>
              </button>
-             <button onClick={()=>handleFeatureClick('fomo', ()=>setModal({type:'fomo', data:null}))} className="bg-orange-900/40 hover:bg-orange-800 border border-orange-600 text-orange-300 p-2 rounded flex flex-col items-center justify-center font-scifi text-sm shadow-[0_0_10px_rgba(234,88,12,0.3)]"><Factory className="mb-1" size={18}/> F.O.M.O. Deck</button>
-             <button onClick={()=>handleFeatureClick('travel', ()=>setModal({type:'travel', data:null}))} className="bg-emerald-900/40 hover:bg-emerald-800 border border-emerald-600 text-emerald-300 p-2 rounded flex flex-col items-center justify-center font-scifi text-sm shadow-[0_0_10px_rgba(16,185,129,0.3)]"><Rocket className="mb-1" size={18}/> C.A.T. Deck</button>
-             <button onClick={()=>handleFeatureClick('shipping', ()=>setModal({type:'shipping', data:null}))} className="bg-blue-900/40 hover:bg-blue-800 border border-blue-600 text-blue-300 p-2 rounded flex flex-col items-center justify-center font-scifi text-sm shadow-[0_0_10px_rgba(37,99,235,0.3)]"><Truck className="mb-1" size={18}/> Void-Ex Logistics</button>
-             <button onClick={()=>handleFeatureClick('comms', ()=>setModal({type:'comms', data:null}))} className="bg-cyan-900/40 hover:bg-cyan-800 border border-cyan-500 text-cyan-300 p-2 rounded flex flex-col items-center justify-center font-scifi text-sm shadow-[0_0_10px_rgba(6,182,212,0.3)]"><Radio className="mb-1" size={18}/> G.I.G.O. Panel</button>
+             <button onClick={()=>handleFeatureClick('fomo', ()=>setModal({type:'fomo', data:null}))} className="bg-orange-900/40 hover:bg-orange-800 border border-orange-600 text-orange-300 p-2 rounded flex flex-col items-center justify-center font-scifi text-xs md:text-sm shadow-[0_0_10px_rgba(234,88,12,0.3)] action-btn"><Factory className="mb-1" size={18}/> F.O.M.O.</button>
+             <button onClick={()=>handleFeatureClick('travel', ()=>setModal({type:'travel', data:null}))} className="bg-emerald-900/40 hover:bg-emerald-800 border border-emerald-600 text-emerald-300 p-2 rounded flex flex-col items-center justify-center font-scifi text-xs md:text-sm shadow-[0_0_10px_rgba(16,185,129,0.3)] action-btn"><Rocket className="mb-1" size={18}/> Travel</button>
+             <button onClick={()=>handleFeatureClick('shipping', ()=>setModal({type:'shipping', data:null}))} className="bg-blue-900/40 hover:bg-blue-800 border border-blue-600 text-blue-300 p-2 rounded flex flex-col items-center justify-center font-scifi text-xs md:text-sm shadow-[0_0_10px_rgba(37,99,235,0.3)] action-btn"><Truck className="mb-1" size={18}/> Logistics</button>
+             <button onClick={()=>handleFeatureClick('comms', ()=>setModal({type:'comms', data:null}))} className="bg-cyan-900/40 hover:bg-cyan-800 border border-cyan-500 text-cyan-300 p-2 rounded flex flex-col items-center justify-center font-scifi text-xs md:text-sm shadow-[0_0_10px_rgba(6,182,212,0.3)] action-btn"><Radio className="mb-1" size={18}/> G.I.G.O.</button>
           </div>
        </div>
 
        {/* MARKET WINDOW */}
-       <div className="card rounded-xl p-0 h-[58vh] flex flex-col bg-gray-900">
-          <div className="flex justify-between items-center p-3 border-b border-gray-700 bg-gray-900 sticky top-0 z-20">
-             <h2 className="font-scifi text-blue-500 text-2xl w-1/3 text-left">{VENUES[state.currentVenueIndex]} Market</h2>
-             <div className={`text-2xl font-scifi font-bold w-1/3 text-center flex justify-center items-center ${state.cash >= 0 ? 'text-green-500' : 'text-red-500'}`}>Capital: <PriceDisplay value={state.cash} size="text-2xl ml-2" /></div>
-             <span className={`${isOverfilled ? 'text-red-500' : 'text-yellow-400'} text-xl font-bold font-mono w-1/3 text-right`}>Cargo Hold Capacity: {Math.round(state.cargoWeight)}/{state.cargoCapacity} T</span>
+       <div className="card sci-fi-box rounded-xl p-0 h-[65vh] md:h-[58vh] flex flex-col bg-gray-900/80">
+          <div className="flex justify-between items-center p-3 border-b border-gray-700 bg-gray-900/90 sticky top-0 z-20">
+             <h2 className="font-scifi text-blue-500 text-lg md:text-2xl w-1/3 text-left truncate">{VENUES[state.currentVenueIndex]}</h2>
+             <div className={`text-lg md:text-2xl font-scifi font-bold w-1/3 text-center flex justify-center items-center ${state.cash >= 0 ? 'text-green-500' : 'text-red-500'}`}><PriceDisplay value={state.cash} size="text-lg md:text-2xl" /></div>
+             <span className={`${isOverfilled ? 'text-red-500' : 'text-yellow-400'} text-sm md:text-xl font-bold font-mono w-1/3 text-right`}>{Math.round(state.cargoWeight)}/{state.cargoCapacity}T</span>
           </div>
           
           <div className="overflow-y-auto custom-scrollbar flex-grow p-2">
-             <table className="w-full border-collapse">
-                <thead className="bg-gray-800 text-gray-400 sticky top-0 z-10 text-base">
+             {/* DESKTOP TABLE VIEW */}
+             <table className="w-full border-collapse hidden md:table">
+                <thead className="bg-gray-800/90 text-gray-400 sticky top-0 z-10 text-base">
                    <tr>
                       <th className="p-2 text-left w-[20%]">Commodity</th>
-                      <th className="p-2 text-left hidden md:table-cell w-[20%]">Intel (Contract/Price)</th>
+                      <th className="p-2 text-left w-[20%]">Intel (Contract/Price)</th>
                       <th className="p-2 text-right w-[10%]">Price</th>
                       <th className="p-2 text-center w-[10%]">Stock</th>
                       <th className="p-2 text-center w-[10%]">Owned</th>
@@ -1400,7 +1597,7 @@ export default function App() {
                                <div className="font-bold text-gray-200 flex items-center text-lg"><span className="mr-2 text-2xl">{c.icon === 'metal-lump' ? '🌑' : c.icon}</span> {c.name}</div>
                                <div className="text-sm text-gray-500 mt-1 flex items-center">{c.unitWeight} T | Range: <PriceDisplay value={dMin} size="text-sm ml-1" compact /> - <PriceDisplay value={dMax} size="text-sm" compact /></div>
                             </td>
-                            <td className="p-2 text-sm text-gray-500 hidden md:table-cell align-top pt-3 text-left">
+                            <td className="p-2 text-sm text-gray-500 align-top pt-3 text-left">
                                {activeContract && !isCovered ? (
                                    <div className="text-yellow-400 font-bold">
                                        ACTIVE CONTRACT: Ship {activeContract.quantity} to {VENUES[activeContract.destinationIndex]}
@@ -1434,13 +1631,13 @@ export default function App() {
                                <div className="flex flex-col space-y-2">
                                   <div className="flex space-x-1 items-center bg-gray-900/50 p-1 rounded">
                                      <input type="number" min="0" placeholder="Qty" className="w-20 bg-gray-800 text-white text-center rounded border border-gray-600 text-sm p-1.5" value={buyQ} onChange={e=>setBuyQuantities({...buyQuantities, [c.name]: e.target.value})} />
-                                     <button onClick={()=>setMaxBuy(c, mItem)} className="w-auto px-4 bg-gray-700 hover:bg-gray-600 text-sm text-white rounded py-1">MAX</button>
-                                     <button onClick={()=>handleTrade('buy', c, mItem, owned)} className="w-auto px-4 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded font-bold py-1">BUY</button>
+                                     <button onClick={()=>setMaxBuy(c, mItem)} className="w-auto px-4 bg-gray-700 hover:bg-gray-600 text-sm text-white rounded py-1 action-btn">MAX</button>
+                                     <button onClick={()=>handleTrade('buy', c, mItem, owned)} className="w-auto px-4 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded font-bold py-1 action-btn">BUY</button>
                                   </div>
                                   <div className="flex space-x-1 items-center bg-gray-900/50 p-1 rounded">
                                      <input type="number" min="0" placeholder="Qty" className="w-20 bg-gray-800 text-white text-center rounded border border-gray-600 text-sm p-1.5" value={sellQ} onChange={e=>setSellQuantities({...sellQuantities, [c.name]: e.target.value})} />
-                                     <button onClick={()=>setSellQuantities({...sellQuantities, [c.name]: owned.quantity.toString()})} disabled={owned.quantity===0} className="w-auto px-4 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 text-sm text-white rounded py-1">ALL</button>
-                                     <button onClick={()=>handleTrade('sell', c, mItem, owned)} disabled={owned.quantity===0} className="w-auto px-4 bg-green-700 hover:bg-green-600 disabled:opacity-30 text-white text-sm rounded font-bold py-1">SELL</button>
+                                     <button onClick={()=>setSellQuantities({...sellQuantities, [c.name]: owned.quantity.toString()})} disabled={owned.quantity===0} className="w-auto px-4 bg-gray-700 hover:bg-gray-600 disabled:opacity-30 text-sm text-white rounded py-1 action-btn">ALL</button>
+                                     <button onClick={()=>handleTrade('sell', c, mItem, owned)} disabled={owned.quantity===0} className="w-auto px-4 bg-green-700 hover:bg-green-600 disabled:opacity-30 text-white text-sm rounded font-bold py-1 action-btn">SELL</button>
                                   </div>
                                </div>
                             </td>
@@ -1449,39 +1646,112 @@ export default function App() {
                    })}
                 </tbody>
              </table>
+
+             {/* MOBILE CARD VIEW */}
+             <div className="md:hidden space-y-4 pb-12">
+                 {COMMODITIES.map(c => {
+                      const mItem = currentMarket[c.name];
+                      const owned = state.cargo[c.name] || {quantity:0, averageCost:0};
+                      const buyQ = buyQuantities[c.name] || '';
+                      const sellQ = sellQuantities[c.name] || '';
+                      
+                      const h2oPasteMinMult = Math.pow(1.05, state.day);
+                      const h2oPasteMaxMult = Math.pow(1.10, state.day);
+                      
+                      let dMin = Math.round(c.minPrice * phaseMult);
+                      let dMax = Math.round(c.maxPrice * phaseMult);
+                      
+                      if (c.name === H2O_NAME || c.name === NUTRI_PASTE_NAME) {
+                          dMin = Math.round(c.minPrice * h2oPasteMinMult);
+                          dMax = Math.round(c.maxPrice * h2oPasteMaxMult);
+                      }
+                      
+                      const priceRange = dMax - dMin;
+                      const relativePrice = (mItem.price - dMin) / priceRange;
+                      let priceColorClass = 'text-yellow-400';
+                      if (relativePrice <= 0.33) priceColorClass = 'text-green-400';
+                      if (relativePrice >= 0.66) priceColorClass = 'text-red-400';
+
+                      // Check for available contract that is NOT active
+                      const hasAvailableContract = state.availableContracts.some(con => con.commodity === c.name);
+                      
+                      // Dynamic Classes for Contract Highlight
+                      const cardClass = hasAvailableContract 
+                        ? "sci-fi-box bg-cyan-900/40 border-2 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)] p-3 rounded-lg" 
+                        : "sci-fi-box bg-slate-800/80 p-3 rounded-lg border border-slate-600";
+
+                      return (
+                          <div key={c.name} className={cardClass}>
+                              <div className="flex justify-between items-start mb-2">
+                                  <div>
+                                      <div className="font-bold text-white text-lg flex items-center">
+                                          <span className="text-xl mr-2">{c.icon === 'metal-lump' ? '🌑' : c.icon}</span> 
+                                          {c.name}
+                                      </div>
+                                      <div className="text-xs text-gray-400">{c.unitWeight}T | <PriceDisplay value={dMin} size="text-[10px]" compact/> - <PriceDisplay value={dMax} size="text-[10px]" compact/></div>
+                                      {hasAvailableContract && <div className="text-xs text-cyan-300 font-bold mt-1 animate-pulse">CONTRACT AVAILABLE</div>}
+                                  </div>
+                                  <div className={`text-xl font-bold ${priceColorClass}`}>{Math.round(mItem.price).toLocaleString()} <StarCoin size={16}/></div>
+                              </div>
+                              
+                              <div className="flex justify-between items-center bg-black/30 p-2 rounded mb-3 text-sm">
+                                  <div className="text-gray-300">Stock: <span className="text-white font-mono">{mItem.quantity}</span></div>
+                                  <div className="text-gray-300">Owned: <span className={`font-mono ${owned.quantity > 0 ? 'text-green-400 font-bold' : 'text-gray-500'}`}>{owned.quantity}</span></div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                  <div className="bg-gray-900/50 p-2 rounded border border-gray-700">
+                                      <div className="flex mb-1">
+                                          <input type="number" placeholder="Qty" className="w-full bg-gray-800 text-white text-center text-sm p-1 rounded-l border-r border-gray-700" value={buyQ} onChange={e=>setBuyQuantities({...buyQuantities, [c.name]: e.target.value})} />
+                                          <button onClick={()=>setMaxBuy(c, mItem)} className="px-2 bg-gray-700 text-white text-xs rounded-r">MAX</button>
+                                      </div>
+                                      <button onClick={()=>handleTrade('buy', c, mItem, owned)} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold py-1 rounded action-btn">BUY</button>
+                                  </div>
+                                  <div className="bg-gray-900/50 p-2 rounded border border-gray-700">
+                                      <div className="flex mb-1">
+                                          <input type="number" placeholder="Qty" className="w-full bg-gray-800 text-white text-center text-sm p-1 rounded-l border-r border-gray-700" value={sellQ} onChange={e=>setSellQuantities({...sellQuantities, [c.name]: e.target.value})} />
+                                          <button onClick={()=>setSellQuantities({...sellQuantities, [c.name]: owned.quantity.toString()})} disabled={owned.quantity===0} className="px-2 bg-gray-700 text-white text-xs rounded-r disabled:opacity-50">ALL</button>
+                                      </div>
+                                      <button onClick={()=>handleTrade('sell', c, mItem, owned)} disabled={owned.quantity===0} className="w-full bg-green-700 hover:bg-green-600 text-white text-sm font-bold py-1 rounded disabled:opacity-50 action-btn">SELL</button>
+                                  </div>
+                              </div>
+                          </div>
+                      );
+                 })}
+             </div>
           </div>
        </div>
        
-       {/* MODALS */}
+       {/* MODALS - Adjusted Max Heights for Mobile */}
        
        {modal.type === 'shop' && (
           <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-             <div className="bg-slate-900 border border-purple-500 p-6 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+             <div className="bg-slate-900 border border-purple-500 p-6 rounded-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto sci-fi-box">
                 <div className="flex justify-between items-center mb-4">
                    <h2 className="text-2xl font-scifi text-purple-400">Fixathing'u'ma Jig Deck</h2>
-                   <button onClick={()=>setModal({type:'none', data:null})} className="text-red-500 font-bold hover:text-red-400"><XCircle /></button>
+                   <button onClick={()=>{setModal({type:'none', data:null}); SFX.play('click');}} className="text-red-500 font-bold hover:text-red-400"><XCircle /></button>
                 </div>
                 <div className="grid grid-cols-1 gap-2">
                    <div className="bg-slate-800 p-3 rounded border border-lime-700/50 mb-2">
                       <h3 className="text-lime-400 font-bold mb-2 flex items-center"><Wrench size={16} className="mr-2"/> Dockyard Repairs</h3>
                       <div className="flex justify-between items-center mb-2">
-                         <span className="text-gray-300 text-sm">Hull Integrity ({state.shipHealth}%)</span>
-                         <div className="w-40">
-                             <button onClick={()=>performRepair('full_hull')} className={`w-full ${state.shipHealth >= MAX_REPAIR_HEALTH ? 'bg-green-700 hover:bg-green-600' : 'bg-red-700 hover:bg-red-600'} px-3 py-1 rounded text-white text-xs font-bold`}>{state.shipHealth >= MAX_REPAIR_HEALTH ? 'Hull Status: OK' : `Repair MAX (${formatCompactNumber(calculateFullRepairCost())})`}</button>
+                         <span className="text-gray-300 text-xs md:text-sm">Hull Integrity ({state.shipHealth}%)</span>
+                         <div className="w-32 md:w-40">
+                             <button onClick={()=>performRepair('full_hull')} className={`w-full ${state.shipHealth >= MAX_REPAIR_HEALTH ? 'bg-green-700 hover:bg-green-600' : 'bg-red-700 hover:bg-red-600'} px-2 py-1 rounded text-white text-[10px] md:text-xs font-bold`}>{state.shipHealth >= MAX_REPAIR_HEALTH ? 'Hull Status: OK' : `Repair MAX (${formatCompactNumber(calculateFullRepairCost())})`}</button>
                          </div>
                       </div>
                       <div className="flex justify-between items-center">
-                         <span className="text-gray-300 text-sm">Laser Status ({state.laserHealth}%)</span>
-                         <div className="w-40">
-                            <button onClick={()=>performRepair('full_laser')} disabled={!hasLaser(state)} className={`w-full ${state.laserHealth >= 100 ? 'bg-green-700 hover:bg-green-600' : 'bg-red-700 hover:bg-red-600'} disabled:opacity-50 px-3 py-1 rounded text-white text-xs flex items-center justify-center font-bold`}>
+                         <span className="text-gray-300 text-xs md:text-sm">Laser Status ({state.laserHealth}%)</span>
+                         <div className="w-32 md:w-40">
+                            <button onClick={()=>performRepair('full_laser')} disabled={!hasLaser(state)} className={`w-full ${state.laserHealth >= 100 ? 'bg-green-700 hover:bg-green-600' : 'bg-red-700 hover:bg-red-600'} disabled:opacity-50 px-2 py-1 rounded text-white text-[10px] md:text-xs flex items-center justify-center font-bold`}>
                                 {state.laserHealth >= 100 ? 'Laser Status: OK' : `Repair MAX (${formatCompactNumber(LASER_REPAIR_COST)})`}
                             </button>
                          </div>
                       </div>
                    </div>
 
-                   <div className="bg-slate-800 p-3 rounded flex justify-between items-center border border-slate-700">
-                      <div>
+                   <div className="bg-slate-800 p-3 rounded flex flex-col md:flex-row justify-between items-center border border-slate-700">
+                      <div className="mb-2 md:mb-0">
                           <div className="text-white font-bold flex items-center"><Box size={16} className="mr-2 text-blue-400"/>Cargo Bay Expansion</div>
                           
                           {state.cargoCapacity < 5000 && <div className="text-xs text-gray-400">Tier 1 Cost per 100T: <PriceDisplay value={2000} size="text-xs"/> + 1 {MESH_NAME}</div>}
@@ -1491,7 +1761,7 @@ export default function App() {
 
                           <div className="text-xs mt-1 text-gray-300">Current: {state.cargoCapacity} T. Max: {getMaxCargo(state.gamePhase)} T.</div>
                       </div>
-                      <div className="flex gap-2 items-center">
+                      <div className="flex gap-2 items-center w-full md:w-auto justify-center">
                           <input type="number" min="1" className="w-16 bg-gray-900 text-white text-center rounded text-sm p-1" value={cargoUpgradeQty} onChange={e=>setCargoUpgradeQty(e.target.value)} />
                           <button onClick={() => {
                               let cost = 2000; let meshReq = 1;
@@ -1521,9 +1791,9 @@ export default function App() {
                               const meshReq = qty * meshPer;
                               const newCap = state.cargoCapacity + (qty * 100);
                               
-                              if (newCap > getMaxCargo(state.gamePhase)) return setModal({type:'message', data: "Exceeds Max Capacity."});
-                              if (state.cash < cost) return setModal({type:'message', data: "Insufficient Cash."});
-                              if ((state.cargo[MESH_NAME]?.quantity||0) < meshReq) return setModal({type:'message', data: `Insufficient ${MESH_NAME}. Need ${meshReq}.`});
+                              if (newCap > getMaxCargo(state.gamePhase)) { SFX.play('error'); return setModal({type:'message', data: "Exceeds Max Capacity."}); }
+                              if (state.cash < cost) { SFX.play('error'); return setModal({type:'message', data: "Insufficient Cash."}); }
+                              if ((state.cargo[MESH_NAME]?.quantity||0) < meshReq) { SFX.play('error'); return setModal({type:'message', data: `Insufficient ${MESH_NAME}. Need ${meshReq}.`}); }
 
                               const newC = {...state.cargo};
                               newC[MESH_NAME].quantity = Math.max(0, newC[MESH_NAME].quantity - meshReq);
@@ -1532,6 +1802,7 @@ export default function App() {
                               setState(prev => prev ? ({...prev, cash: prev.cash - cost, cargo: newC, cargoCapacity: newCap, cargoWeight: prev.cargoWeight - (meshReq * 2.5)}) : null);
                               setCargoUpgradeQty('1');
                               log(`UPGRADES: Expanded Cargo Bay by ${qty*100}T.`, 'buy');
+                              SFX.play('success');
                           }} className="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded text-white text-xs flex items-center">Expand</button>
                       </div>
                    </div>
@@ -1549,11 +1820,11 @@ export default function App() {
                         <div key={item.id} className={`bg-slate-800 p-3 rounded flex justify-between items-center border border-slate-700 ${locked ? 'opacity-50 grayscale' : (!canAfford ? 'opacity-60' : '')}`}>
                              <div>
                                 <div className="text-white font-bold flex items-center"><Icon size={16} className="mr-2 text-purple-400"/> {item.name}</div>
-                                <div className="text-xs text-gray-400">{item.description}</div>
+                                <div className="text-xs text-gray-400 max-w-[150px] md:max-w-none">{item.description}</div>
                              </div>
                              {locked ? <span className="text-gray-500 text-xs italic">LOCKED (Req. Previous Mk)</span> : 
                                (state.equipment[item.id] ? <span className="text-green-500 text-xs font-bold">OWNED</span> : (
-                               <button onClick={()=>buyEquipment(item)} disabled={!canAfford} className="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 px-3 py-1 rounded text-white text-xs flex items-center">Buy (<PriceDisplay value={scaledCost} size="text-xs ml-1"/>)</button>
+                               <button onClick={()=>buyEquipment(item)} disabled={!canAfford} className="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 px-3 py-1 rounded text-white text-xs flex items-center whitespace-nowrap">Buy (<PriceDisplay value={scaledCost} size="text-xs ml-1"/>)</button>
                              ))}
                         </div>
                       );
@@ -1565,21 +1836,21 @@ export default function App() {
        
        {modal.type === 'overweight_warning' && (
            <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[100] p-4">
-              <div className="bg-slate-900 border border-red-500 p-6 rounded-xl max-w-sm w-full text-center">
+              <div className="bg-slate-900 border border-red-500 p-6 rounded-xl max-w-sm w-full text-center sci-fi-box">
                   <h3 className="text-xl text-red-500 font-bold mb-4 font-scifi">Cargo Overload Warning</h3>
                   <p className="text-gray-300 mb-4 text-sm">
                       Your ship is overloaded! Flight regulations prohibit travel when cargo exceeds capacity.
                   </p>
                   <p className="text-white font-bold text-lg mb-6">Current: {modal.data.current} / {modal.data.max} T</p>
                   <p className="text-yellow-400 text-xs italic mb-6">Please Sell or Ship cargo to comply.</p>
-                  <button onClick={() => setModal({type:'none', data:null})} className="w-full bg-red-600 hover:bg-red-500 py-3 rounded text-white font-bold">MESSAGE CONFIRMED</button>
+                  <button onClick={() => {setModal({type:'none', data:null}); SFX.play('click');}} className="w-full bg-red-600 hover:bg-red-500 py-3 rounded text-white font-bold">MESSAGE CONFIRMED</button>
               </div>
            </div>
        )}
 
        {modal.type === 'stock_limit_confirm' && (
            <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
-              <div className="bg-slate-900 border border-yellow-500 p-6 rounded-xl max-w-sm w-full text-center">
+              <div className="bg-slate-900 border border-yellow-500 p-6 rounded-xl max-w-sm w-full text-center sci-fi-box">
                   <h3 className="text-xl text-yellow-500 font-bold mb-4 font-scifi">Stock Availability Alert</h3>
                   <p className="text-gray-300 mb-4 text-sm">
                       Only <span className="text-white font-bold">{modal.data.actualStock}</span> units of {modal.data.commodity.name} available.
@@ -1590,10 +1861,6 @@ export default function App() {
                   <div className="flex gap-4">
                       <button onClick={() => {
                           const updatedTrade = { ...modal.data, quantity: modal.data.actualStock };
-                          // But we need to avoid recursion if we just call handleTrade.
-                          // Let's call executeTrade directly, but we need to check tax threshold.
-                          // Actually, existing tax check was done BEFORE this if quantity was high.
-                          // Let's just force the tax check again or proceed.
                           const txKey = `${state.currentVenueIndex}_${updatedTrade.commodity.name}`;
                           const txCount = state.dailyTransactions[txKey] || 0;
                           let newTax = 0;
@@ -1604,7 +1871,7 @@ export default function App() {
                               executeTrade({ ...updatedTrade, tax: 0 });
                           }
                       }} className="flex-1 bg-yellow-600 hover:bg-yellow-500 py-2 rounded text-black font-bold">YES</button>
-                      <button onClick={() => setModal({type:'none', data:null})} className="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded text-white">NO</button>
+                      <button onClick={() => {setModal({type:'none', data:null}); SFX.play('click');}} className="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded text-white">NO</button>
                   </div>
               </div>
            </div>
@@ -1612,7 +1879,7 @@ export default function App() {
 
        {modal.type === 'tax_confirm' && (
            <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
-              <div className="bg-slate-900 border border-red-500 p-6 rounded-xl max-w-sm w-full text-center">
+              <div className="bg-slate-900 border border-red-500 p-6 rounded-xl max-w-sm w-full text-center sci-fi-box">
                   <h3 className="text-xl text-red-500 font-bold mb-4 font-scifi">Frequent Trading Tax Alert</h3>
                   <p className="text-gray-300 mb-4 text-sm">
                       You are conducting multiple transactions for <span className="text-white font-bold">{modal.data.commodity.name}</span> today. 
@@ -1621,7 +1888,7 @@ export default function App() {
                   <p className="text-yellow-400 text-xs italic mb-6">Overdraft is authorized for tax payments if funds are insufficient.</p>
                   <div className="flex gap-4">
                       <button onClick={() => executeTrade(modal.data)} className="flex-1 bg-red-600 hover:bg-red-500 py-2 rounded text-white font-bold">ACCEPT & PAY</button>
-                      <button onClick={() => setModal({type:'none', data:null})} className="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded text-white">CANCEL</button>
+                      <button onClick={() => {setModal({type:'none', data:null}); SFX.play('click');}} className="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded text-white">CANCEL</button>
                   </div>
               </div>
            </div>
@@ -1629,10 +1896,10 @@ export default function App() {
 
        {modal.type === 'fomo' && (
            <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-              <div className="bg-slate-900 border border-orange-500 p-6 rounded-xl max-w-lg w-full">
+              <div className="bg-slate-900 border border-orange-500 p-6 rounded-xl max-w-lg w-full sci-fi-box max-h-[85vh] overflow-y-auto">
                   <div className="flex justify-between items-center mb-4">
                       <h2 className="text-2xl font-scifi text-orange-400">Fabricate Output Management Operations (F.O.M.O.) Engineering Deck</h2>
-                      <button onClick={()=>setModal({type:'none', data:null})} className="text-red-500 font-bold hover:text-red-400"><XCircle /></button>
+                      <button onClick={()=>{setModal({type:'none', data:null}); SFX.play('click');}} className="text-red-500 font-bold hover:text-red-400"><XCircle /></button>
                   </div>
                   
                   {/* MESH Fabrication */}
@@ -1695,12 +1962,12 @@ export default function App() {
 
        {modal.type === 'travel' && (
           <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-             <div className="bg-slate-900 border border-emerald-500 p-6 rounded-xl max-w-3xl w-full h-[80vh] flex flex-col">
+             <div className="bg-slate-900 border border-emerald-500 p-6 rounded-xl max-w-3xl w-full h-[85vh] flex flex-col sci-fi-box">
                 <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
                    <h2 className="text-2xl font-scifi text-emerald-400">Chart and Travel (C.A.T.) Station</h2>
-                   <button onClick={()=>setModal({type:'none', data:null})} className="text-red-500 font-bold hover:text-red-400"><XCircle /></button>
+                   <button onClick={()=>{setModal({type:'none', data:null}); SFX.play('click');}} className="text-red-500 font-bold hover:text-red-400"><XCircle /></button>
                 </div>
-                <div className="overflow-y-auto space-y-2 flex-grow">
+                <div className="overflow-y-auto space-y-2 flex-grow custom-scrollbar">
                    {VENUES.map((v, i) => {
                       if (i===state.currentVenueIndex) return (
                          <div key={v} className="bg-emerald-900/30 border border-emerald-500 p-3 rounded flex justify-between items-center">
@@ -1717,15 +1984,15 @@ export default function App() {
                       const riskColor = cost > 12 ? 'text-red-500' : (cost > 6 ? 'text-yellow-500' : 'text-green-500');
 
                       return (
-                         <div key={v} className={`bg-slate-800 p-3 rounded flex justify-between items-center hover:bg-slate-700 ${isBanned?'opacity-50 border border-red-500':''}`}>
-                            <div>
+                         <div key={v} className={`bg-slate-800 p-3 rounded flex flex-col md:flex-row justify-between items-center hover:bg-slate-700 ${isBanned?'opacity-50 border border-red-500':''}`}>
+                            <div className="w-full md:w-auto mb-2 md:mb-0">
                                 <div className="text-white font-bold">{v} {isBanned && <span className="text-red-500 ml-2">(BANNED: {state.venueTradeBans[i]}d)</span>}</div>
                                 <div className="text-xs text-gray-500">Distance: {cost} Fuel | Risk: <span className={riskColor}>{riskLevel}</span></div>
                             </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => setModal({type: 'view_intel', data: { idx: i, name: v }})} className="bg-purple-600 hover:bg-purple-500 border border-purple-400 px-3 py-1 rounded text-xs font-bold text-white">Spill the Tea on Market</button>
-                                <button disabled={!can} onClick={()=>setModal({type:'travel_confirm', data: {destIndex:i, baseFuelCost:cost, venueName:v, insuranceCost: Math.round(getCargoValue(state.cargo) * 0.05)}})} 
-                                className={`px-3 py-1 rounded text-xs font-bold ${can?'bg-blue-600 text-white':'bg-gray-700 text-gray-500'}`}>PLOT JUMP</button>
+                            <div className="flex gap-2 w-full md:w-auto justify-end">
+                                <button onClick={() => {setModal({type: 'view_intel', data: { idx: i, name: v }}); SFX.play('click');}} className="bg-purple-600 hover:bg-purple-500 border border-purple-400 px-3 py-1 rounded text-xs font-bold text-white flex-grow md:flex-grow-0">Spill the Tea</button>
+                                <button disabled={!can} onClick={()=>{setModal({type:'travel_confirm', data: {destIndex:i, baseFuelCost:cost, venueName:v, insuranceCost: Math.round(getCargoValue(state.cargo) * 0.05)}}); SFX.play('click');}} 
+                                className={`px-3 py-1 rounded text-xs font-bold flex-grow md:flex-grow-0 ${can?'bg-blue-600 text-white':'bg-gray-700 text-gray-500'}`}>PLOT JUMP</button>
                             </div>
                          </div>
                       )
@@ -1737,7 +2004,7 @@ export default function App() {
 
        {modal.type === 'view_intel' && (
            <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[60] p-4">
-               <div className="bg-slate-900 border border-blue-400 p-6 rounded-xl max-w-lg w-full h-[60vh] flex flex-col">
+               <div className="bg-slate-900 border border-blue-400 p-6 rounded-xl max-w-lg w-full h-[60vh] flex flex-col sci-fi-box">
                    <h3 className="text-xl font-scifi text-blue-400 mb-4">Market Intel: {modal.data.name}</h3>
                    <div className="overflow-y-auto flex-grow custom-scrollbar">
                        <table className="w-full text-xs text-left">
@@ -1769,19 +2036,19 @@ export default function App() {
                            </tbody>
                        </table>
                    </div>
-                   <button onClick={()=>setModal({type:'travel', data:null})} className="mt-4 w-full bg-gray-700 hover:bg-gray-600 py-2 rounded text-white font-bold">RETURN TO C.A.T. STATION</button>
+                   <button onClick={()=>{setModal({type:'travel', data:null}); SFX.play('click');}} className="mt-4 w-full bg-gray-700 hover:bg-gray-600 py-2 rounded text-white font-bold">RETURN TO C.A.T. STATION</button>
                </div>
            </div>
        )}
        
        {modal.type === 'banking' && (
            <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-               <div className="bg-slate-900 border border-yellow-600 p-6 rounded-xl max-w-3xl w-full h-[80vh] flex flex-col">
+               <div className="bg-slate-900 border border-yellow-600 p-6 rounded-xl max-w-3xl w-full h-[85vh] flex flex-col sci-fi-box">
                     <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
-                       <h2 className="text-2xl font-scifi text-yellow-500">Intergalactic Banking And Network Knowledge (I.B.A.N.K.). Hub</h2>
-                       <button onClick={()=>setModal({type:'none', data:null})} className="text-red-500 font-bold hover:text-red-400"><XCircle /></button>
+                       <h2 className="text-2xl font-scifi text-yellow-500">I.B.A.N.K. Hub</h2>
+                       <button onClick={()=>{setModal({type:'none', data:null}); SFX.play('click');}} className="text-red-500 font-bold hover:text-red-400"><XCircle /></button>
                     </div>
-                    <div className="grid grid-cols-2 gap-4 flex-grow overflow-y-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow overflow-y-auto custom-scrollbar">
                    <div>
                       <h3 className="text-white font-bold mb-2">Borrowing (Limit: 3 Active)</h3>
                       {state.activeLoans.map((l, i) => {
@@ -1794,10 +2061,11 @@ export default function App() {
                             <div className="text-xs text-gray-400">Due: {l.daysRemaining} days</div>
                             {fee > 0 && <div className="text-xs text-orange-400">Early Repay Fee: <PriceDisplay value={fee} size="text-xs"/></div>}
                             <button onClick={()=>{
-                               if(state.cash < totalRepay) return;
+                               if(state.cash < totalRepay) { SFX.play('error'); return; }
                                const newL=[...state.activeLoans]; newL.splice(i,1);
                                setState(prev=>prev?({...prev, cash:prev.cash-totalRepay, activeLoans:newL}):null);
                                log(`LOAN: Repaid ${l.firmName} (${formatCurrencyLog(l.currentDebt)} + ${formatCurrencyLog(fee)} fee)`, 'buy');
+                               SFX.play('coin');
                             }} className="w-full bg-red-700 hover:bg-red-600 text-white text-xs py-1 rounded mt-1 flex justify-center items-center">
                                 Repay Total: <PriceDisplay value={totalRepay} size="text-xs ml-1" compact/>
                             </button>
@@ -1819,9 +2087,10 @@ export default function App() {
                                      <button onClick={()=>{
                                         if(state.activeLoans.length>=3) return;
                                         if(alreadyOwe) return; 
-                                        if(state.loanTakenToday) return setModal({type:'message', data:"Loan limit daily reached."});
+                                        if(state.loanTakenToday) { SFX.play('error'); return setModal({type:'message', data:"Loan limit daily reached."}); }
                                         const loan = {id:Date.now(), firmName:o.firmName, principal:o.amount, currentDebt:o.amount, interestRate:o.interestRate, daysRemaining:5, originalDay:state.day};
                                         setState(prev=>prev?({...prev, cash:prev.cash+o.amount, activeLoans:[...prev.activeLoans, loan], loanTakenToday:true}):null);
+                                        SFX.play('coin');
                                      }} disabled={alreadyOwe || dailyLimitHit} className="bg-blue-600 disabled:bg-gray-600 text-white px-2 py-1 rounded">Accept</button>
                                   </div>
                                 );
@@ -1852,15 +2121,16 @@ export default function App() {
                                </select>
                             </div>
                             <button onClick={()=>{
-                               if(state.activeLoans.length > 0) return setModal({type:'message', data:"Cannot invest while in debt."});
+                               if(state.activeLoans.length > 0) { SFX.play('error'); return setModal({type:'message', data:"Cannot invest while in debt."}); }
                                const amt = parseInt((document.getElementById('invest-amount') as HTMLInputElement).value);
                                const term = parseInt((document.getElementById('invest-term') as HTMLSelectElement).value);
-                               if(isNaN(amt) || amt<=0 || state.cash<amt) return;
+                               if(isNaN(amt) || amt<=0 || state.cash<amt) { SFX.play('error'); return; }
                                const rates: any = {1:0.05, 2:0.20, 3:0.50};
                                const rate = rates[term];
                                const mat = Math.floor(amt * (1 + rate));
                                const inv = {id:Date.now(), amount:amt, daysRemaining:term, maturityValue:mat, interestRate:rate};
                                setState(prev=>prev?({...prev, cash:prev.cash-amt, investments:[...prev.investments, inv]}):null);
+                               SFX.play('coin');
                             }} className="w-full bg-green-600 hover:bg-green-500 text-white py-1 rounded font-bold">DEPOSIT FUNDS</button>
                        </div>
                    </div>
@@ -1871,10 +2141,10 @@ export default function App() {
 
        {modal.type === 'comms' && (
           <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-             <div className="bg-slate-900 border border-cyan-500 p-6 rounded-xl max-w-2xl w-full h-[80vh] flex flex-col">
+             <div className="bg-slate-900 border border-cyan-500 p-6 rounded-xl max-w-2xl w-full h-[80vh] flex flex-col sci-fi-box">
                 <div className="flex justify-between items-center mb-4">
-                   <h2 className="text-2xl font-scifi text-cyan-300">Gigantic Information Generated Output (G.I.G.O.) Panel</h2>
-                   <button onClick={()=>setModal({type:'none', data:null})} className="text-red-500 font-bold hover:text-red-400"><XCircle /></button>
+                   <h2 className="text-2xl font-scifi text-cyan-300">G.I.G.O. Panel</h2>
+                   <button onClick={()=>{setModal({type:'none', data:null}); SFX.play('click');}} className="text-red-500 font-bold hover:text-red-400"><XCircle /></button>
                 </div>
                 <div ref={commsContainerRef} className="overflow-y-auto custom-scrollbar text-xs font-mono space-y-2 flex-grow bg-black p-4 rounded border border-cyan-900">
                    {state.messages.slice().reverse().map(log => (
@@ -1887,7 +2157,7 @@ export default function App() {
 
        {modal.type === 'event_encounter' && (
           <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4">
-             <div className="bg-red-900/20 border-2 border-red-500 p-6 rounded-xl max-w-md w-full text-center shadow-[0_0_50px_rgba(239,68,68,0.3)]">
+             <div className="bg-red-900/20 border-2 border-red-500 p-6 rounded-xl max-w-md w-full text-center shadow-[0_0_50px_rgba(239,68,68,0.3)] sci-fi-box">
                 <h2 className="text-3xl font-scifi text-red-500 mb-2">{modal.data.encounter.title}</h2>
                 <p className="text-white mb-6 text-lg">{modal.data.encounter.description}</p>
                 <div className="space-y-3">
@@ -1901,8 +2171,9 @@ export default function App() {
                             } else {
                                 rep.events.push("COMBAT: Pirates repelled by Plasma Cannons.");
                             }
+                            SFX.play('warp'); // Combat sound
                             finalizeJump(modal.data.state, rep, modal.data.destIdx, modal.data.mine, modal.data.overload);
-                         } else { setModal({type:'message', data:"Weapons Systems not installed!"}); }
+                         } else { SFX.play('error'); setModal({type:'message', data:"Weapons Systems not installed!"}); }
                       }} className="w-full bg-red-600 hover:bg-red-500 py-3 rounded text-white font-bold border border-red-400">ATTACK (Requires Plasma Cannons)</button>
                    )}
                    {(modal.data.encounter.type === 'accident' || modal.data.encounter.type === 'fuel_leak') && (
@@ -1915,8 +2186,9 @@ export default function App() {
                             } else {
                                 rep.events.push("DEFENSE: Shields absorbed impact.");
                             }
+                            SFX.play('success');
                             finalizeJump(modal.data.state, rep, modal.data.destIdx, modal.data.mine, modal.data.overload);
-                         } else { setModal({type:'message', data:"Shield Generator not installed!"}); }
+                         } else { SFX.play('error'); setModal({type:'message', data:"Shield Generator not installed!"}); }
                       }} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded text-white font-bold border border-blue-400">ENGAGE SHIELDS (Requires Generator)</button>
                    )}
                    {modal.data.encounter.type === 'derelict' && (
@@ -1928,16 +2200,19 @@ export default function App() {
                                    const reward = Math.floor(Math.random() * 5000) + 1000;
                                    modal.data.state.cash += reward;
                                    rep.events.push(`SALVAGE: Found ${formatCurrencyLog(reward)} in crew quarters.`);
+                                   SFX.play('coin');
                                } else {
                                    const dmg = 15;
                                    modal.data.state.shipHealth -= dmg;
                                    rep.totalHullDamage += dmg;
                                    rep.events.push(`TRAP: Derelict was booby-trapped! -${dmg}% Hull.`);
+                                   SFX.play('alarm');
                                }
                                finalizeJump(modal.data.state, rep, modal.data.destIdx, modal.data.mine, modal.data.overload);
                            }} className="w-full bg-yellow-600 hover:bg-yellow-500 py-3 rounded text-white font-bold border border-yellow-400">SEARCH SHIP (Risk/Reward)</button>
                            <button onClick={() => {
                                const rep = modal.data.report; rep.events.push("IGNORE: Derelict left undisturbed.");
+                               SFX.play('click');
                                finalizeJump(modal.data.state, rep, modal.data.destIdx, modal.data.mine, modal.data.overload);
                            }} className="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded text-white">LEAVE IT ALONE</button>
                        </>
@@ -1946,6 +2221,7 @@ export default function App() {
                       <button onClick={() => {
                          modal.data.state.cash -= modal.data.encounter.demandAmount;
                          const rep = modal.data.report; rep.events.push(`SURRENDER: Paid ${formatCurrencyLog(modal.data.encounter.demandAmount)} demand.`);
+                         SFX.play('coin');
                          finalizeJump(modal.data.state, rep, modal.data.destIdx, modal.data.mine, modal.data.overload);
                       }} className="w-full bg-yellow-700 hover:bg-yellow-600 py-3 rounded text-white font-bold flex justify-center items-center">PAY DEMAND (<PriceDisplay value={modal.data.encounter.demandAmount} size="text-lg ml-2" />)</button>
                    )}
@@ -1975,7 +2251,7 @@ export default function App() {
                                   }
                               }
                           }
-
+                          SFX.play('warp');
                           finalizeJump(modal.data.state, rep, modal.data.destIdx, modal.data.mine, modal.data.overload);
                        }} className="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded text-white">EMERGENCY ACTION (Risk Damage)</button>
                    )}
@@ -1986,7 +2262,7 @@ export default function App() {
 
        {modal.type === 'travel_confirm' && (
           <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4">
-             <div className="bg-slate-900 border border-blue-400 p-6 rounded-xl max-w-sm w-full">
+             <div className="bg-slate-900 border border-blue-400 p-6 rounded-xl max-w-sm w-full sci-fi-box">
                 <h3 className="text-xl text-blue-400 font-scifi mb-4">Jump Protocol: {modal.data.venueName}</h3>
                 
                 <div className="space-y-4 mb-6 text-sm text-gray-300">
@@ -2018,28 +2294,28 @@ export default function App() {
                    
                    const totalFuel = modal.data.baseFuelCost + (mine ? 1 : 0);
                    
-                   if ((state.cargo[FUEL_NAME]?.quantity||0) < totalFuel) return setModal({type:'message', data:'Insufficient fuel.'});
+                   if ((state.cargo[FUEL_NAME]?.quantity||0) < totalFuel) { SFX.play('error'); return setModal({type:'message', data:'Insufficient fuel.'}); }
                    
                    handleTravel(modal.data.destIndex, totalFuel, ins, mine, overload, invest95);
                 }} className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded text-white font-bold text-lg mb-2">INITIATE JUMP</button>
-                <button onClick={()=>setModal({type:'travel', data:null})} className="w-full text-red-500 font-bold hover:text-red-400">ABORT</button>
+                <button onClick={()=>{setModal({type:'travel', data:null}); SFX.play('click');}} className="w-full text-red-500 font-bold hover:text-red-400">ABORT</button>
              </div>
           </div>
        )}
 
        {modal.type === 'shipping' && (
           <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-             <div className="bg-slate-900 border border-blue-400 p-6 rounded-xl max-w-2xl w-full flex flex-col h-[80vh]">
+             <div className="bg-slate-900 border border-blue-400 p-6 rounded-xl max-w-2xl w-full flex flex-col h-[85vh] sci-fi-box">
                 <div className="flex justify-between items-center mb-4">
                    <div className="flex items-center gap-4">
-                       <h2 className="text-2xl font-scifi text-blue-400"><Truck className="inline mr-2"/>Void-Ex Logistics</h2>
-                       <div className="flex space-x-2">
-                           <button onClick={()=>setLogisticsTab('contracts')} className={`px-3 py-1 rounded text-sm ${logisticsTab==='contracts'?'bg-blue-600 text-white':'bg-gray-700 text-gray-300'}`}>Contracts</button>
-                           <button onClick={()=>setLogisticsTab('shipping')} className={`px-3 py-1 rounded text-sm ${logisticsTab==='shipping'?'bg-blue-600 text-white':'bg-gray-700 text-gray-300'}`}>Private Shipping</button>
-                           <button onClick={()=>setLogisticsTab('warehouse')} className={`px-3 py-1 rounded text-sm ${logisticsTab==='warehouse'?'bg-blue-600 text-white':'bg-gray-700 text-gray-300'}`}>Warehouse</button>
+                       <h2 className="text-xl md:text-2xl font-scifi text-blue-400 truncate"><Truck className="inline mr-2"/>Void-Ex</h2>
+                       <div className="flex space-x-1 md:space-x-2">
+                           <button onClick={()=>setLogisticsTab('contracts')} className={`px-2 py-1 rounded text-[10px] md:text-sm ${logisticsTab==='contracts'?'bg-blue-600 text-white':'bg-gray-700 text-gray-300'}`}>Contracts</button>
+                           <button onClick={()=>setLogisticsTab('shipping')} className={`px-2 py-1 rounded text-[10px] md:text-sm ${logisticsTab==='shipping'?'bg-blue-600 text-white':'bg-gray-700 text-gray-300'}`}>Private</button>
+                           <button onClick={()=>setLogisticsTab('warehouse')} className={`px-2 py-1 rounded text-[10px] md:text-sm ${logisticsTab==='warehouse'?'bg-blue-600 text-white':'bg-gray-700 text-gray-300'}`}>Storage</button>
                        </div>
                    </div>
-                   <button onClick={()=>setModal({type:'none', data:null})} className="text-red-500 font-bold hover:text-red-400"><XCircle /></button>
+                   <button onClick={()=>{setModal({type:'none', data:null}); SFX.play('click');}} className="text-red-500 font-bold hover:text-red-400"><XCircle /></button>
                 </div>
 
                 {shippingSuccessMessage && (
@@ -2101,7 +2377,7 @@ export default function App() {
                        <div>
                            <h4 className="text-white mb-2 text-sm uppercase tracking-wide">Ship Cargo</h4>
                            <table className="w-full text-xs text-gray-300">
-                              <thead><tr className="text-left text-gray-500"><th className="p-2">Item</th><th className="p-2">Stock (Source)</th><th className="p-2">Qty</th><th className="p-2">Dest/Tier</th><th className="p-2">Action</th></tr></thead>
+                              <thead><tr className="text-left text-gray-500"><th className="p-2">Item</th><th className="p-2 hidden md:table-cell">Stock (Source)</th><th className="p-2">Qty</th><th className="p-2">Dest/Tier</th><th className="p-2">Action</th></tr></thead>
                               <tbody>
                                  {COMMODITIES.map(c => {
                                     const srcInfo = shippingSource[c.name] || { type: 'cargo', venueIdx: state.currentVenueIndex };
@@ -2143,42 +2419,42 @@ export default function App() {
 
                                     return (
                                     <tr key={c.name} className={`border-b border-gray-800 ${isHighlighted ? 'bg-purple-600/50' : ''}`}>
-                                       <td className="p-2 font-bold">{c.name} <br/><span className="text-[10px] text-gray-500">{srcInfo.type==='warehouse' ? `(Warehouse: ${VENUES[srcInfo.venueIdx]})` : '(Cargo Hold)'}</span></td>
-                                       <td className="p-2">{stock}</td>
+                                       <td className="p-2 font-bold max-w-[100px] truncate">{c.name} <br/><span className="text-[8px] text-gray-500">{srcInfo.type==='warehouse' ? `(WH)` : '(Hold)'}</span></td>
+                                       <td className="p-2 hidden md:table-cell">{stock}</td>
                                        <td className="p-2">
-                                           <div className="flex space-x-1">
-                                               <input type="number" min="0" className="w-16 bg-gray-800 p-1 rounded text-center" value={shipQ} onChange={e=>setShippingQuantities({...shippingQuantities, [c.name]:e.target.value})} />
-                                               <button onClick={()=>setShippingQuantities({...shippingQuantities, [c.name]:stock.toString()})} className="px-2 bg-gray-700 hover:bg-gray-600 rounded">MAX</button>
+                                           <div className="flex flex-col md:flex-row space-y-1 md:space-y-0 md:space-x-1">
+                                               <input type="number" min="0" className="w-12 md:w-16 bg-gray-800 p-1 rounded text-center text-xs" value={shipQ} onChange={e=>setShippingQuantities({...shippingQuantities, [c.name]:e.target.value})} placeholder={stock.toString()}/>
+                                               <button onClick={()=>setShippingQuantities({...shippingQuantities, [c.name]:stock.toString()})} className="px-1 md:px-2 bg-gray-700 hover:bg-gray-600 rounded text-[10px] md:text-xs">ALL</button>
                                            </div>
                                        </td>
                                        <td className="p-2 space-y-1">
-                                          <select id={`ship-dest-${c.name}`} className="bg-slate-800 text-white p-1 rounded w-full" onChange={(e) => {
+                                          <select id={`ship-dest-${c.name}`} className="bg-slate-800 text-white p-1 rounded w-full text-[10px] md:text-xs" onChange={(e) => {
                                               setShippingDestinations(prev => ({...prev, [c.name]: e.target.value}));
                                               setShippingQuantities({...shippingQuantities}); 
                                           }} value={shippingDestinations[c.name] || ''}>
-                                             <option value="">Select Destination</option>
+                                             <option value="">Dest</option>
                                              {VENUES.map((v,i) => i !== srcInfo.venueIdx && !(state.venueTradeBans[i]>0) && <option key={v} value={i}>{v}</option>)}
                                           </select>
                                           
-                                          <select id={`ship-tier-${c.name}`} className="bg-slate-800 text-white p-1 rounded w-full" onChange={() => setShippingQuantities({...shippingQuantities})}>
-                                              <option value="1">Priority (1 Day)</option>
-                                              <option value="2">Standard (2 Days)</option>
-                                              <option value="3">Bulk (3 Days)</option>
+                                          <select id={`ship-tier-${c.name}`} className="bg-slate-800 text-white p-1 rounded w-full text-[10px] md:text-xs" onChange={() => setShippingQuantities({...shippingQuantities})}>
+                                              <option value="1">Fast</option>
+                                              <option value="2">Std</option>
+                                              <option value="3">Slow</option>
                                           </select>
 
                                           {costDisplay > 0 && (
-                                              <div className="mt-1 text-xs font-bold text-yellow-400 bg-black/40 p-1 rounded text-center">
-                                                  Cost: <PriceDisplay value={costDisplay} size="text-xs"/>
+                                              <div className="mt-1 text-[10px] font-bold text-yellow-400 bg-black/40 p-1 rounded text-center">
+                                                  <PriceDisplay value={costDisplay} size="text-[10px]"/>
                                               </div>
                                           )}
                                        </td>
                                        <td className="p-2">
                                           <button onClick={() => {
                                              const qty = parseInt(shippingQuantities[c.name] || '0');
-                                             if(isNaN(qty) || qty <= 0 || qty > stock) return setModal({type:'message', data:"Invalid Quantity."});
+                                             if(isNaN(qty) || qty <= 0 || qty > stock) { SFX.play('error'); return setModal({type:'message', data:"Invalid Quantity."}); }
 
                                              const destEl = document.getElementById(`ship-dest-${c.name}`) as HTMLSelectElement;
-                                             if(!destEl || !destEl.value) return setModal({type:'message', data:"Destination invalid or banned."});
+                                             if(!destEl || !destEl.value) { SFX.play('error'); return setModal({type:'message', data:"Destination invalid or banned."}); }
                                              const dest = parseInt(destEl.value);
                                              const tier = parseInt((document.getElementById(`ship-tier-${c.name}`) as HTMLSelectElement).value);
                                              
@@ -2188,7 +2464,7 @@ export default function App() {
                                              const tierMult = tier === 1 ? 2 : (tier === 3 ? 0.5 : 1);
                                              const totalCashCost = Math.ceil((baseFee + distFee) * tierMult);
 
-                                             if (state.cash < totalCashCost) return setModal({type:'message', data:`Cannot afford fee (${formatCurrencyLog(totalCashCost)}).`});
+                                             if (state.cash < totalCashCost) { SFX.play('error'); return setModal({type:'message', data:`Cannot afford fee (${formatCurrencyLog(totalCashCost)}).`}); }
                                              
                                              const newW = { ...state.warehouse };
                                              if (!newW[dest]) newW[dest] = {};
@@ -2220,8 +2496,9 @@ export default function App() {
                                              setShippingSource(prev => { const n = {...prev}; delete n[c.name]; return n; });
                                              setLogisticsTab('contracts'); 
                                              setShippingSuccessMessage(`Shipment dispatched to ${VENUES[dest]}. Arrival: Day ${arrivalDay}.`);
+                                             SFX.play('success');
                                              setTimeout(() => setShippingSuccessMessage(null), 5000); 
-                                          }} className="bg-blue-700 hover:bg-blue-600 px-2 py-1 rounded text-white text-xs w-full">SHIP</button>
+                                          }} className="bg-blue-700 hover:bg-blue-600 px-2 py-1 rounded text-white text-[10px] md:text-xs w-full">SHIP</button>
                                        </td>
                                     </tr>
                                     );
@@ -2290,7 +2567,7 @@ export default function App() {
        
        {modal.type === 'report' && (
           <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-             <div className="bg-slate-900 border border-emerald-500 p-6 rounded-xl max-w-md w-full">
+             <div className="bg-slate-900 border border-emerald-500 p-6 rounded-xl max-w-md w-full sci-fi-box">
                 <h2 className="text-2xl font-scifi text-emerald-500 mb-4">Daily Report (Day {modal.data.day})</h2>
                 {modal.data.quirky && (
                     <div className={`p-2 rounded mb-3 text-sm italic border-l-4 ${['bureaucracy','glitch','chemistry'].includes(modal.data.quirky.theme) ? 'bg-blue-900/30 border-blue-500 text-blue-200' : 'bg-yellow-900/30 border-yellow-500 text-yellow-200'}`}>
@@ -2307,7 +2584,7 @@ export default function App() {
 
        {modal.type === 'goal_achieved' && (
            <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4">
-               <div className="bg-slate-900 border border-yellow-400 p-8 rounded-xl text-center max-w-md w-full">
+               <div className="bg-slate-900 border border-yellow-400 p-8 rounded-xl text-center max-w-md w-full sci-fi-box">
                    <Trophy size={64} className="mx-auto text-yellow-400 mb-4"/>
                    <h2 className="text-3xl font-scifi text-yellow-400 mb-2">PHASE {modal.data.phase} COMPLETE</h2>
                    <p className="text-gray-300 mb-4">Net Worth Goal Achieved! Expanding market parameters...</p>
@@ -2322,7 +2599,7 @@ export default function App() {
        
        {modal.type === 'highscores' && (
            <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-               <div className="bg-slate-900 border border-yellow-600 p-6 rounded-xl max-w-md w-full">
+               <div className="bg-slate-900 border border-yellow-600 p-6 rounded-xl max-w-md w-full sci-fi-box">
                     <h2 className="text-2xl font-scifi text-yellow-500 mb-4 flex items-center"><Trophy className="mr-2"/> GALACTIC LEGENDS</h2>
                     <div className="space-y-2 mb-4">
                         {state.highScores.map((s,i)=>(
@@ -2335,7 +2612,7 @@ export default function App() {
                     <div className="flex gap-2">
                         <button onClick={attemptVoluntaryRestart} className="flex-1 bg-red-800 hover:bg-red-700 py-2 rounded text-white font-bold text-xs">RESTART GAME</button>
                         <button onClick={saveAndExit} className="flex-1 bg-black border border-green-900 hover:bg-gray-900 py-2 rounded text-green-500 font-bold text-xs flex items-center justify-center"> Save and Exit Ship</button>
-                        <button onClick={()=>setModal({type:'none', data:null})} className="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded text-white font-bold text-xs">CLOSE</button>
+                        <button onClick={()=>{setModal({type:'none', data:null}); SFX.play('click');}} className="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded text-white font-bold text-xs">CLOSE</button>
                     </div>
                </div>
            </div>
@@ -2343,7 +2620,7 @@ export default function App() {
 
        {modal.type === 'load_save' && (
            <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4">
-               <div className="bg-slate-900 border border-green-500 p-8 rounded-xl text-center max-w-md w-full">
+               <div className="bg-slate-900 border border-green-500 p-8 rounded-xl text-center max-w-md w-full sci-fi-box">
                    <Save size={64} className="mx-auto text-green-500 mb-4"/>
                    <h2 className="text-2xl font-scifi text-green-400 mb-4">Save Game Detected</h2>
                    <p className="text-white mb-6">Captain, we found your log from a previous journey.</p>
@@ -2352,6 +2629,7 @@ export default function App() {
                        <button onClick={()=>{
                            localStorage.removeItem('sbe_savegame');
                            initGame(false);
+                           SFX.init(); // Init audio on new game start
                        }} className="w-full bg-gray-700 hover:bg-gray-600 py-3 rounded text-white">Acquire a Fresh license</button>
                    </div>
                </div>
@@ -2360,7 +2638,7 @@ export default function App() {
 
        {modal.type === 'tutorial_intro' && (
            <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[100] p-4">
-               <div className="bg-slate-900 border border-cyan-500 p-6 rounded-xl max-w-sm w-full text-center">
+               <div className="bg-slate-900 border border-cyan-500 p-6 rounded-xl max-w-sm w-full text-center sci-fi-box">
                    <HelpCircle size={48} className="mx-auto text-cyan-500 mb-4"/>
                    <h2 className="text-xl font-scifi text-cyan-400 mb-2">Neural Link Detected</h2>
                    <p className="text-gray-300 mb-6 text-sm">Welcome, Captain. Would you like to enable the tactical tutorial overlay?</p>
@@ -2368,8 +2646,9 @@ export default function App() {
                        <button onClick={() => {
                            setState(prev => prev ? ({...prev, tutorialActive: true}) : null);
                            setModal({type:'none', data:null});
+                           SFX.play('success');
                        }} className="flex-1 bg-cyan-600 hover:bg-cyan-500 py-2 rounded text-white font-bold">ENABLE LINK</button>
-                       <button onClick={() => setModal({type:'none', data:null})} className="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded text-white">DISABLE</button>
+                       <button onClick={() => {setModal({type:'none', data:null}); SFX.play('click');}} className="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded text-white">DISABLE</button>
                    </div>
                </div>
            </div>
@@ -2377,7 +2656,7 @@ export default function App() {
        
        {modal.type === 'tutorial_popup' && (
            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
-               <div className="bg-slate-800 border-2 border-cyan-500 p-6 rounded-xl max-w-md w-full relative">
+               <div className="bg-slate-800 border-2 border-cyan-500 p-6 rounded-xl max-w-md w-full relative sci-fi-box">
                    <h2 className="text-xl font-scifi text-cyan-400 mb-2">{modal.data.title}</h2>
                    <p className="text-gray-300 mb-4 text-sm whitespace-pre-wrap">{modal.data.text}</p>
                    {TUTORIAL_QUOTES[modal.data.feature] && (
@@ -2398,7 +2677,7 @@ export default function App() {
 
        {modal.type === 'endgame' && (
            <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4">
-               <div className="bg-slate-900 border border-red-500 p-8 rounded-xl text-center max-w-md w-full">
+               <div className="bg-slate-900 border border-red-500 p-8 rounded-xl text-center max-w-md w-full sci-fi-box">
                    <Skull size={64} className="mx-auto text-red-500 mb-4"/>
                    <h2 className="text-3xl font-scifi text-red-500 mb-2">GAME OVER</h2>
                    <p className="text-white text-lg mb-2">{modal.data.reason}</p>
@@ -2430,29 +2709,33 @@ export default function App() {
 
        {modal.type === 'message' && (
            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
-               <div className="bg-slate-800 border border-gray-500 p-6 rounded-xl max-w-sm w-full text-center">
+               <div className="bg-slate-800 border border-gray-500 p-6 rounded-xl max-w-sm w-full text-center sci-fi-box">
                    <p className={`text-white mb-4 ${modal.data.color || ''}`}>{modal.data.color ? modal.data.data : modal.data}</p>
-                   <button onClick={()=>setModal({type:'none', data:null})} className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-white">OK</button>
+                   <button onClick={()=>{setModal({type:'none', data:null}); SFX.play('click');}} className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-white">OK</button>
                </div>
            </div>
        )}
        
        {modal.type === 'welcome' && (
            <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4">
-               <div className="bg-slate-900 border border-yellow-500 p-8 rounded-xl max-w-md w-full text-center">
+               <div className="bg-slate-900 border border-yellow-500 p-8 rounded-xl max-w-md w-full text-center sci-fi-box">
                    <h2 className="text-3xl font-scifi text-yellow-500 mb-4">$TAR BUCKS</h2>
                    <p className="text-cyan-400 mb-6 text-base">Welcome, Captain. <br/><br/>
                    Your former business partner has passed, leaving his debts... and his dreams... to you. We have secured a <StarCoin size={16}/> 30,000 loan to buy out his Widow and reinstate our trading license, but your ship has been stripped down to the core by the former mutant crew's mutiny and murder mayhem incident. 
                    <span className="text-red-400 block mt-4 font-bold">WARNING: Account Overdrawn (-5,000 $B). Stabilize finances immediately.</span>
                    </p>
-                   <button onClick={()=>setModal({type:'first_priority', data:null})} className="bg-yellow-600 hover:bg-yellow-500 text-black font-bold px-6 py-3 rounded w-full">BEGIN JOURNEY</button>
+                   <button onClick={()=>{
+                       setModal({type:'first_priority', data:null});
+                       SFX.init(); // Start Audio Context on user gesture
+                       SFX.play('success');
+                   }} className="bg-yellow-600 hover:bg-yellow-500 text-black font-bold px-6 py-3 rounded w-full">BEGIN JOURNEY</button>
                </div>
            </div>
        )}
 
        {modal.type === 'first_priority' && (
            <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4">
-               <div className="bg-slate-900 border border-yellow-500 p-8 rounded-xl max-w-md w-full text-center">
+               <div className="bg-slate-900 border border-yellow-500 p-8 rounded-xl max-w-md w-full text-center sci-fi-box">
                    <h2 className="text-2xl font-scifi text-yellow-400 mb-4">First Priority</h2>
                    <div className="text-yellow-400 mb-6 text-sm text-left space-y-4">
                        <p>Getting another loan from the Banking Hub to continue trading is vital. Secondly: Buying a mining laser and protection for the ship from the upgrade deck.</p>
@@ -2460,7 +2743,7 @@ export default function App() {
                        <p>Don't forget to buy commodities low and sell high.</p>
                        <p className="text-xs italic text-right mt-2 opacity-75">By order Sector Health, Allocation, & Network Enforcement (S.H.A.N.E.).</p>
                    </div>
-                   <button onClick={()=>setModal({type:'none', data:null})} className="bg-yellow-600 hover:bg-yellow-500 text-black font-bold px-6 py-3 rounded w-full">ACKNOWLEDGE</button>
+                   <button onClick={()=>{setModal({type:'none', data:null}); SFX.play('click');}} className="bg-yellow-600 hover:bg-yellow-500 text-black font-bold px-6 py-3 rounded w-full">ACKNOWLEDGE</button>
                </div>
            </div>
        )}
